@@ -102,12 +102,11 @@ def get_user(user_id):
 
     if user:
         return jsonify({
-            'user_id': user[0],
-            'fname': user[1],
-            'lname': user[2],
-            'type': user[3],
-            'created_at': user[4].strftime('%Y-%m-%d %H:%M:%S')
-
+            'user_id': user["aid"],
+            'fname': user["fname"],
+            'lname': user["lname"],
+            'type': user["type"],
+            'created_at': user["created_at"].strftime('%Y-%m-%d %H:%M:%S')
         }), 200
     else:
         return jsonify({"error":"User not found"}), 404
@@ -321,7 +320,7 @@ def get_forums():
 
     try:
         if course_id:
-            cursor.execute("SELECT dfid, dfname FROM DiscussionForum WHERE cid = %s")
+            cursor.execute("SELECT dfid, dfname FROM DiscussionForum WHERE cid = %s", (course_id))
         else:
             cursor.execute("SELECT dfid, dfname, cid FROM DiscussionForum")
 
@@ -485,7 +484,7 @@ def create_assignment():
     cursor = conn.cursor()
 
     try:
-        cursor.execute("INSERT INTO Assignment (asid, submitbox, due_date) VALUES (%s, %s, %s, %s)",
+        cursor.execute("INSERT INTO Assignment (asid, submitbox, max_score, due_date) VALUES (%s, %s, %s, %s)",
                        (itemid, submitbox, max_score, due_date))
         conn.commit()
         return jsonify({"message": "Assignment created successfully."})
