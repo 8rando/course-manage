@@ -89,30 +89,6 @@ def insert_admins(NUM_ADMINS):
     conn.close()
     print("Admins inserted successfully.")
 
-# =========================== Insert Maintainers ===========================
-
-# def insert_maintainers(NUM_MAINTAINERS):
-#     conn = get_db_connection()
-#     cursor = conn.cursor()
-
-#     print(f"Inserting {NUM_MAINTAINERS} maintainers...")
-
-#     for _ in tqdm(range(NUM_MAINTAINERS)):
-#         fname = fake.first_name()
-#         lname = fake.last_name()
-#         password = "password123"
-
-#         cursor.execute("INSERT INTO Account (password, type, fname, lname) VALUES (%s, 'admin', %s, %s)",
-#                        (password, fname, lname))
-#         maintainer_id = cursor.lastrowid
-
-#         cursor.execute("INSERT INTO Maintainer (cmid) VALUES (%s)", (maintainer_id,))
-
-#     conn.commit()
-#     cursor.close()
-#     conn.close()
-#     print("Maintainers inserted successfully.")
-
 # =========================== Insert Assignments ===========================
 
 
@@ -190,7 +166,7 @@ def insert_sections():
     conn.close()
     print("Sections inserted.")
 
-
+# =========================== Enroll Students in Courses ===========================
 def enroll_students():
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -286,53 +262,6 @@ def assign_lecturers_to_courses():
     conn.close()
     print("Lecturers assigned successfully.")
 
-
-# def assign_lecturers_to_courses():
-#     conn = get_db_connection()
-#     cursor = conn.cursor()
-
-#     print("Assigning lecturers to courses...")
-
-#     cursor.execute("SELECT lid FROM Lecturer")
-#     lecturers = [row[0] for row in cursor.fetchall()]
-
-#     cursor.execute("SELECT cid FROM Course")
-#     courses = [row[0] for row in cursor.fetchall()]
-
-#     # Clear existing associations to avoid conflicts
-#     try:
-#         cursor.execute("DELETE FROM LecturerCourse")
-#         print("Cleared existing lecturer-course assignments.")
-#     except pymysql.MySQLError as e:
-#         print(f"Warning: Could not clear existing assignments: {e}")
-
-#     # Create a set to track already assigned combinations
-#     assigned_pairs = set()
-
-#     for i, cid in enumerate(tqdm(courses)):
-#         # Rotate through lecturers but ensure unique combinations
-#         for attempt in range(len(lecturers)):
-#             lid = lecturers[(i + attempt) % len(lecturers)]
-#             pair = (lid, cid)
-
-#             if pair not in assigned_pairs:
-#                 assigned_pairs.add(pair)
-#                 assigned_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-#                 try:
-#                     cursor.execute("INSERT INTO LecturerCourse (lid, cid, assigned_date) VALUES (%s, %s, %s)",
-#                                    (lid, cid, assigned_date))
-#                     break  # Successfully inserted, move to next course
-#                 except pymysql.err.IntegrityError as e:
-#                     print(f"Warning: Could not assign lecturer {lid} to course {cid}: {e}")
-#                     continue  # Try another lecturer
-
-#     conn.commit()
-#     cursor.close()
-#     conn.close()
-#     print("Lecturers assigned successfully.")
-
-
 # =========================== Insert Assignment Submissions ===========================
 
 def insert_assignment_submissions():
@@ -374,16 +303,193 @@ def insert_assignment_submissions():
 
 
 
+# =========================== Insert Discussion Forums ===========================
+def insert_discussion_forums():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    print("Inserting discussion forums...")
+
+    # Get all course IDs
+    cursor.execute("SELECT cid FROM Course")
+    courses = [row['cid'] for row in cursor.fetchall()]
+
+    for cid in tqdm(courses):
+        for i in range(random.randint(1, 3)):
+            forum_name = fake.catch_phrase()
+            cursor.execute("INSERT INTO DiscussionForum (dfname, cid) VALUES (%s, %s)", (forum_name, cid))
+        
+    conn.commit()
+    cursor.close()
+    conn.close()
+    print("Discussion forums inserted successfully.")
+
+def insert_discussion_threads():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    print("Inserting discussion threads...")
+
+    # Get all forum IDs
+    cursor.execute("SELECT dfid FROM DiscussionForum")
+    forums = [row['dfid'] for row in cursor.fetchall()]
+
+    # Get account IDs
+    cursor.execute("SELECT aid FROM Account LIMIT 1000")
+    accounts = [row['aid'] for row in cursor.fetchall()]
+
+    for dfid in tqdm(forums):
+        for i in range(random.randint(3, 5)):
+            thread_title = fake.sentence()
+            thread_text = fake.paragraph()
+            aid = random.choice(accounts)
+            cursor.execute("INSERT INTO DiscussionThread (dtname, dttext,dfid, aid, parent_dtid) VALUES (%s, %s, %s, %s, NULL)", 
+                           (thread_title, thread_text, dfid, aid))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+    print("Discussion threads inserted successfully.")
+
+# =========================== Insert Calendar Events ===========================
+def insert_calendar_events():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    print("Inserting calendar events...")
+    
+    # Get all course IDs
+    cursor.execute("SELECT cid FROM Course")
+    courses = [row['cid'] for row in cursor.fetchall()]
+
+    for cid in tqdm(courses):
+        # Each course gets 3-5 calendar events
+        for i in range(random.randint(3, 5)):
+            event_name = fake.bs()
+            event_date = fake.date_between(start_date='-30d', end_date='+60d')
+            event_data = fake.paragraph()
+
+            cursor.execute("INSERT INTO CalendarEvent (data, calname, event_date, cid) VALUES (%s, %s, %s, %s)",
+                           (event_data, event_name, event_date, cid))
+            
+    conn.commit()
+    cursor.close()
+    conn.close()
+    print("Calendar events inserted successfully.")
+
+# 
+def insert_section_items():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    print("Creating section items...")
+
+    # Get all section IDs
+    cursor.execute("SELECT secid FROM Section")
+    sections= [row['secid'] for row in cursor.fetchall()]
+    
+    item_types = ['document', 'link', 'lecture_slide']
+
+    for secid in tqdm(sections):
+
+        for i in range(random.randint(2,5)):
+            item_name = fake.catch_phrase()
+            item_type = random.choice(item_types)
+
+            cursor.execute("INSERT INTO SectionItem (itemname, secid, type) VALUES (%s, %s, %s)",
+                           (item_name, secid, item_type))
+            
+            item_id = cursor.lastrowid
+
+            # Create appropriate type-specific record
+            if item_type == 'document':
+                file_path = f"/files/documents/{fake.file_name(extension='pdf')}"
+                cursor.execute("INSERT INTO Document (docid, docname, file_path) VALUES (%s, %s, %s)", (item_id, item_name, file_path))
+
+            elif item_type == 'link':
+                link_url = fake.url()
+                cursor.execute("INSERT INTO Link (linkid, linkname, hyplink) VALUES (%s, %s, %s)", (item_id, item_name, link_url))
+            elif item_type == 'lecture_slide':
+                file_path = f"/files/slides/{fake.file_name(extension='pptx')}"
+                cursor.execute("INSERT INTO LectureSlide (lsid, lsname, file_path) VALUES (%s, %s, %s)", (item_id, item_name, file_path))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+    print("Section items inserted successfully.")
+
+#
+def ensure_popular_courses():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    print("Ensuring courses have 50+ students...")
+
+    # Get students
+    cursor.execute("SELECT sid FROM Student LIMIT 10000")
+    students = [row['sid'] for row in cursor.fetchall()]
+
+
+    # Get courses with fewer than 50 students
+    cursor.execute("""
+        SELECT c.cid, COUNT(sc.sid) as count
+        FROM Course c
+        LEFT JOIN StudentCourse sc ON c.cid = sc.cid
+        GROUP BY c.cid
+        HAVING COUNT(sc.sid) < 50
+        LIMIT 20
+""")
+    
+    courses = cursor.fetchall()
+
+    for course in tqdm(courses):
+        cid = course['cid']
+        needed = 50 - course['count']
+
+        # Find students not in this course
+        cursor.execute("SELECT sid FROM StudentCourse WHERE cid = %s", (cid,))
+        existing = {row['sid'] for row in cursor.fetchall()}
+
+        avaliable = [s for s in students if s not in existing]
+        to_add = min(needed, len(avaliable))
+
+        for sid in random.sample(avaliable, to_add):
+            cursor.execute("INSERT INTO StudentCourse (sid, cid) VALUES (%s, %s)", (sid, cid))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+    print("Course enrollment adjusted successfully.")
+
+
+
+
+
 
 if __name__ == '__main__':
+
+    # Base data
     insert_students(NUM_STUDENTS)
     insert_lecturers(NUM_LECTURERS)
-    insert_assignments(NUM_ASSIGNMENTS)
     insert_admins(NUM_ADMINS)
-    # insert_maintainers(NUM_MAINTAINERS)
+    
+    # Courses and their components
     insert_courses(NUM_COURSES)
+    insert_sections()
+    
+    # Relationships
     enroll_students()
     assign_lecturers_to_courses()
+    
+    # Course content
+    insert_section_items()  # Fixed function
+    insert_assignments(NUM_ASSIGNMENTS)
+    
+    # Additional features
+    insert_discussion_forums()
+    insert_discussion_threads()
+    insert_calendar_events()
+    
+    # Finalization
     insert_assignment_submissions()
-    insert_sections()
+    ensure_popular_courses()
+    
+
     print("Data generation completed!")

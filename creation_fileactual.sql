@@ -1,4 +1,9 @@
 -- Drop tables if they exist (in reverse order of dependencies)
+
+DROP DATABASE course_management;
+
+CREATE DATABASE course_management;
+
 use course_management;
 
 DROP TABLE IF EXISTS StudentReply;
@@ -31,7 +36,6 @@ DROP TABLE IF EXISTS LecturerCourse;
 
 DROP TABLE IF EXISTS Course;
 
-DROP TABLE IF EXISTS CourseMaintainer;
 
 DROP TABLE IF EXISTS Student;
 
@@ -92,18 +96,7 @@ CREATE TABLE Student (
     FOREIGN KEY (sid) REFERENCES Account(aid) ON DELETE CASCADE
 
 );
-
-
-
-CREATE TABLE CourseMaintainer (
-
-    cmid INT PRIMARY KEY,
-
-    FOREIGN KEY (cmid) REFERENCES Account(aid) ON DELETE CASCADE
-
-);
-
-
+ 
 
 CREATE TABLE Course (
 
@@ -147,7 +140,7 @@ CREATE TABLE LecturerCourse (
 
     assigned_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
-    PRIMARY KEY (cid),  -- One lecturer per course
+    PRIMARY KEY (lid,cid),  -- One lecturer per course
 
     FOREIGN KEY (lid) REFERENCES Lecturer(lid) ON DELETE CASCADE,
 

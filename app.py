@@ -283,6 +283,7 @@ def get_calendar_events():
         cursor.close()
         conn.close()
 
+# =================================== Create Calendar Events ===================================
 @app.route('/api/calendar_events', methods=['POST'])
 def create_calendar_event():
     data = request.json
@@ -438,6 +439,7 @@ def add_course_content():
         conn.close()
 
 
+# =================================== Retrieve Course Content ===================================
 @app.route('/api/content', methods=['GET'])
 def get_course_content():
     course_id = request.args.get("course_id")
@@ -494,6 +496,8 @@ def create_assignment():
         cursor.close()
         conn.close()
 
+
+# =================================== Retrieve Assignments ===================================
 @app.route('/api/assignments', methods=['GET'])
 def get_assignments():
     course_id = request.args.get("course_id")
@@ -519,6 +523,8 @@ def get_assignments():
         cursor.close()
         conn.close()
 
+
+# =================================== Submit Assignments ===================================
 @app.route('/api/submit_assignment', methods=['POST'])
 def submit_assignment():
     data = request.json
@@ -543,6 +549,7 @@ def submit_assignment():
         cursor.close()
         conn.close()
 
+# =================================== Grade Assignments ===================================
 @app.route('/api/grade_assignment', methods= ['POST'])
 def grade_assignment():
     data = request.json
