@@ -6,9 +6,9 @@ from config import get_db_connection
 from datetime import  datetime
 fake = Faker()
 
-NUM_STUDENTS = 200  #200000
-NUM_LECTURERS = 20 #2000
-NUM_COURSES = 201
+NUM_STUDENTS = 200000  #200000
+NUM_LECTURERS = 2000 #2000
+NUM_COURSES = 400
 NUM_ASSIGNMENTS = 500
 NUM_ADMINS = 10
 NUM_MAINTAINERS = 10

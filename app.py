@@ -146,7 +146,7 @@ def get_courses():
     user_id = request.args.get("user_id")
 
     conn = get_db_connection()
-    cursor = conn.cursor(dictionary = True)
+    cursor = conn.cursor()
 
     try:
         if user_type == "student":
@@ -229,7 +229,7 @@ def assign_lecturer():
 @app.route('/api/course/<int:course_id>/members', methods=['GET'])
 def get_course_members(course_id):
     conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor()
 
     try:
         cursor.execute("""
@@ -261,7 +261,7 @@ def get_calendar_events():
     student_id = request.args.get("student_id")
 
     conn = get_db_connection()
-    cursor = conn.cursor(dictionary = True)
+    cursor = conn.cursor()
 
     try:
         if course_id:
@@ -317,7 +317,7 @@ def get_forums():
     course_id = request.args.get("course_id")
 
     conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor()
 
     try:
         if course_id:
@@ -365,7 +365,7 @@ def get_threads():
     forum_id = request.args.get("forum_id")
 
     conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor()
 
     try:
         cursor.execute("SELECT dtid, dttext, aid, created_at FROM DiscussionThread WHERE dfid = %s", (forum_id,))
@@ -448,7 +448,7 @@ def get_course_content():
         return jsonify({"error": "Course ID is required"}), 400
 
     conn = get_db_connection()
-    cursor = conn.cursor(dictionary = True)
+    cursor = conn.cursor()
 
     try:
         cursor.execute("""
@@ -505,7 +505,7 @@ def get_assignments():
     if not course_id:
         return jsonify({"error": "CourseID is required."}), 400
     conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor()
 
     try:
         cursor.execute("""
