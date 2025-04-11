@@ -13,6 +13,14 @@ NUM_ASSIGNMENTS = 500
 NUM_ADMINS = 10
 NUM_MAINTAINERS = 10
 
+
+prefixes = ['Intro to', 'Advanced', 'Fundamentals of', 'Principles of', 'Basics of', 'Applied', 'Studies in',
+                 'Research Methods in', 'Applied', 'Theories of', 'Concepts in', 'Introduction to']
+suffixes =['Science', 'Mathematics', 'Engineering', 'Computing', 'Biology', 'Physics', 'Chemistry', 'Economics', 'Psychology', 'Distributed Systems', 'Database Management Systems',
+                'Machine Learning', 'Artificial Intelligence', 'Software Engineering', 'Web Development', 'Data Science', 'Cybersecurity', 'Networking', 'Human-Computer Interaction', 
+                'Cloud Computing', 'Information Systems']
+    
+
 # =========================== Insert Students ===========================
 
 
@@ -135,14 +143,41 @@ def insert_courses(NUM_COURSES):
 
     print(f"Inserting {NUM_COURSES} courses...")
 
-    course_names = [f"{fake.word().capitalize()} {fake.word().capitalize()}" for _ in range(NUM_COURSES)]
+    # Define prefixes and suffixes for course names
 
-    for cname in tqdm(course_names):
-        cursor.execute('INSERT INTO Course (cname) VALUES (%s)', (cname,))
+    prefixes = ['Intro to', 'Advanced', 'Fundamentals of', 'Principles of', 'Basics of', 'Applied', 'Studies in',
+                 'Research Methods in', 'Applied', 'Theories of', 'Concepts in', 'Introduction to']
+    suffixes =['Science', 'Mathematics', 'Engineering', 'Computing', 'Biology', 'Physics', 'Chemistry', 'Economics', 'Psychology', 'Distributed Systems', 'Database Management Systems',
+                'Machine Learning', 'Artificial Intelligence', 'Software Engineering', 'Web Development', 'Data Science', 'Cybersecurity', 'Networking', 'Human-Computer Interaction', 
+                'Cloud Computing', 'Information Systems']
+    
+    # Generate course names
+    course_names = []
+    used_combinations = set()
 
-    conn.commit()
-    cursor.close()
-    conn.close()
+    all_combinations = [(p,s) for p in prefixes for s in suffixes]
+    random.shuffle(all_combinations)
+
+    max_possible = min(NUM_COURSES, len(all_combinations))
+    selected_combinations = all_combinations[:max_possible]
+
+    course_names = [f'{prefix} {suffix}' for prefix, suffix in selected_combinations]
+
+    print(f"Generated {len(course_names)} unique course names.")
+
+    try:
+        batch = 100
+        for i in range(0, len(course_names), batch):
+            batch_names = course_names[i:i+batch]
+            args = [(name,) for name in batch_names]
+            cursor.executemany("INSERT INTO Course (cname) VALUES (%s)", args)
+            conn.commit()
+            print(f"Inserted batch {i//batch + 1}/{(len(course_names)-1)//batch + 1} " f"({len(batch_names)} courses)")
+    except Exception as e:
+        print(f"Error inserting courses: {e}")
+    finally:
+        cursor.close()
+        conn.close()
     print("Courses inserted successfully.")
 
 
@@ -157,7 +192,7 @@ def insert_sections():
     courses = [row['cid'] for row in cursor.fetchall()]
 
     for cid in courses:
-        for _ in range(random.randint(2,5)): # Each course 2-5 sections
+        for i in range(random.randint(2,5)): # Each course 2-5 sections
             secname = fake.catch_phrase()
             cursor.execute("INSERT INTO Section (secname, cid) VALUES (%s, %s)", (secname, cid))
 
@@ -384,38 +419,76 @@ def insert_section_items():
 
     # Get all section IDs
     cursor.execute("SELECT secid FROM Section")
-    sections= [row['secid'] for row in cursor.fetchall()]
+    sections = [row['secid'] for row in cursor.fetchall()]
+    
+    # Define prefixes and suffixes for content items
+    doc_prefixes = ["Lecture Notes on", "Guide to", "Introduction to", "Summary of", 
+                   "Research Paper:", "Workshop on", "Study Materials for", "Handbook of"]
+    
+    doc_suffixes = ["Core Concepts", "Practical Applications", "Theoretical Foundations", 
+                   "Common Problems", "Key Techniques", "Essential Principles", 
+                   "Historical Overview", "Modern Approaches", "Best Practices"]
+    
+    slide_prefixes = ["Week", "Lecture", "Tutorial", "Module", "Session", "Class", "Unit", "Workshop"]
+    
+    slide_suffixes = ["Overview", "Introduction", "Key Concepts", "Advanced Topics", 
+                     "Review", "Case Study", "Practice Problems", "Discussion Points"]
+    
+    link_prefixes = ["Resource:", "External Link:", "Website:", "Reference:", "Tutorial:", 
+                    "Video:", "Tool:", "Article:"]
+    
+    link_suffixes = ["Additional Reading", "Interactive Demo", "Practice Exercise", 
+                    "Visualization", "Reference Implementation", "Documentation", 
+                    "Research Paper", "Industry Example"]
     
     item_types = ['document', 'link', 'lecture_slide']
 
     for secid in tqdm(sections):
-
-        for i in range(random.randint(2,5)):
-            item_name = fake.catch_phrase()
+        for i in range(random.randint(2, 5)):
             item_type = random.choice(item_types)
-
+            
+            # Generate a name appropriate for the content type
+            if item_type == 'document':
+                prefix = random.choice(doc_prefixes)
+                suffix = random.choice(doc_suffixes)
+                item_name = f"{prefix} {suffix}"
+                file_path = f"/files/documents/{suffix.lower().replace(' ', '_')}_{random.randint(1000, 9999)}.pdf"
+            
+            elif item_type == 'lecture_slide':
+                prefix = random.choice(slide_prefixes)
+                suffix = random.choice(slide_suffixes)
+                item_name = f"{prefix} {random.randint(1, 12)}: {suffix}"
+                file_path = f"/files/slides/{prefix.lower()}_{suffix.lower().replace(' ', '_')}_{random.randint(1000, 9999)}.pptx"
+            
+            elif item_type == 'link':
+                prefix = random.choice(link_prefixes)
+                suffix = random.choice(link_suffixes)
+                item_name = f"{prefix} {suffix}"
+                link_url = f"https://{fake.domain_name()}/{suffix.lower().replace(' ', '-')}"
+            
+            # Insert the section item
             cursor.execute("INSERT INTO SectionItem (itemname, secid, type) VALUES (%s, %s, %s)",
-                           (item_name, secid, item_type))
+                          (item_name, secid, item_type))
             
             item_id = cursor.lastrowid
 
             # Create appropriate type-specific record
             if item_type == 'document':
-                file_path = f"/files/documents/{fake.file_name(extension='pdf')}"
-                cursor.execute("INSERT INTO Document (docid, docname, file_path) VALUES (%s, %s, %s)", (item_id, item_name, file_path))
-
+                cursor.execute("INSERT INTO Document (docid, docname, file_path) VALUES (%s, %s, %s)", 
+                              (item_id, item_name, file_path))
+            
             elif item_type == 'link':
-                link_url = fake.url()
-                cursor.execute("INSERT INTO Link (linkid, linkname, hyplink) VALUES (%s, %s, %s)", (item_id, item_name, link_url))
+                cursor.execute("INSERT INTO Link (linkid, linkname, hyplink) VALUES (%s, %s, %s)", 
+                              (item_id, item_name, link_url))
+            
             elif item_type == 'lecture_slide':
-                file_path = f"/files/slides/{fake.file_name(extension='pptx')}"
-                cursor.execute("INSERT INTO LectureSlide (lsid, lsname, file_path) VALUES (%s, %s, %s)", (item_id, item_name, file_path))
+                cursor.execute("INSERT INTO LectureSlide (lsid, lsname, file_path) VALUES (%s, %s, %s)", 
+                              (item_id, item_name, file_path))
 
     conn.commit()
     cursor.close()
     conn.close()
     print("Section items inserted successfully.")
-
 #
 def ensure_popular_courses():
     conn = get_db_connection()
