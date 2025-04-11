@@ -79,11 +79,11 @@ def login():
     cursor.close()
     conn.close()
 
-    if user and bcrypt.check_password_hash(user[1], password):
-        return jsonify({"message": "Login successful", "user_id": user[0], "type": user[2]}), 200
+    # Fix: Access dictionary fields by name instead of position
+    if user and bcrypt.check_password_hash(user["password"], password):
+        return jsonify({"message": "Login successful", "user_id": user["aid"], "type": user["type"]}), 200
     else:
         return jsonify({"error": "Invalid credentials"}), 401
-
 
 # =================================== Retrieve User Information ===================================
 
@@ -190,8 +190,11 @@ def enroll_student():
         cursor.execute("SELECT * FROM StudentCourse WHERE sid = %s AND cid = %s", (sid, cid))
         if cursor.fetchone():
             return jsonify({"error": "Student is already in this course"}), 409
-        cursor.execute("INSERT INTO StudentCourse (sid, cid) VALUES (%s, %s)", (sid,cid))
+        
+        cursor.execute("INSERT INTO StudentCourse (sid, cid) VALUES (%s, %s)", (sid, cid))
         conn.commit()
+        
+        # Note: The trigger will automatically update the participants count
         return jsonify({"message": "Student enrolled successfully"}), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -557,12 +560,12 @@ def grade_assignment():
     grade = data.get("grade")
 
     if not all([submission_id, grade]):
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": "Missing required fields"}), 400
     conn = get_db_connection()
     cursor = conn.cursor()
 
     try:
-        cursor.execute("IPDATE AssignmentSubmission SET grade = %s WHERE submission_id= %s",
+        cursor.execute("UPDATE AssignmentSubmission SET grade = %s WHERE submission_id= %s",
                        (grade, submission_id))
         conn.commit()
         return jsonify({"message": "Assignment graded successfully"}), 200
@@ -573,5 +576,32 @@ def grade_assignment():
         conn.close()
 
 
+@app.route('/api/admin/fix_participant_counts', methods=['POST'])
+def fix_participant_counts():
+    user_type = request.json.get("user_type")
+    
+    if user_type != "admin":
+        return jsonify({"error": "Only admins can run maintenance functions"}), 403
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("""
+        UPDATE Course c
+        SET c.participants = (
+            SELECT COUNT(*) 
+            FROM StudentCourse sc 
+            WHERE sc.cid = c.cid
+        )
+        """)
+        conn.commit()
+        return jsonify({"message": "Participant counts updated successfully"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
 if __name__ == "__main__":
-    app.run(port=8080,debug=True)
+    app.run(port=9090,debug=True)

@@ -3,7 +3,7 @@ import pymysql
 from faker import Faker
 from tqdm import  tqdm
 from config import get_db_connection
-from datetime import  datetime
+from datetime import  datetime, timedelta
 fake = Faker()
 
 NUM_STUDENTS = 200000  #200000
@@ -262,41 +262,78 @@ def assign_lecturers_to_courses():
 
     print("Assigning lecturers to courses...")
 
-    # Get valid lecturer IDs
+    # Retrieve valid lecturer IDs
     cursor.execute("SELECT lid FROM Lecturer")
     lecturers = [row['lid'] for row in cursor.fetchall()]
 
     if not lecturers:
-        print("Error: No lecturers found in the database. Ensure lecturers are inserted before running this script.")
+        print("Error: No lecturers found in the database. Ensure lecturers are inserted before running this function.")
         conn.close()
         return
-
-    # Get valid course IDs
+    
+    # Retrieve valid course IDs
     cursor.execute("SELECT cid FROM Course")
     courses = [row['cid'] for row in cursor.fetchall()]
 
     if not courses:
-        print("Error: No courses found in the database.")
+        print("Error: No courses found in the database. Ensure courses are inserted before running this function.")
         conn.close()
         return
+    
+    try:
+        cursor.execute("DELETE FROM LecturerCourse")
+        print("Cleared existing lecturer-course assignments.")
+    except Exception as e:
+        print(f"Warning: Could not clear existing assignments: {e}")
+
+    # Creating special distribution such that lecturers will have 3+ courses
+    # First 100 lecturers will be assigned to 3 courses each
+    special_lecturers = lecturers[:100] if len(lecturers) >= 100 else lecturers
+    regular_lecturers = lecturers[100:] if len(lecturers) >= 100 else []
+
 
     assigned_pairs = set()
+    assigned_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    for i, cid in enumerate(tqdm(courses)):
-        lid = lecturers[i % len(lecturers)]  # Assign lecturers round-robin
-        assigned_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    course_index = 0
+    for lid in tqdm(special_lecturers, desc = "Assigning special lecturers"):
+        courses_assigned = 0
+        while courses_assigned < 3 and course_index  < len(courses):
+            cid = courses[course_index]
+            pair = (lid, cid)
 
+            if pair not in assigned_pairs:
+                try:
+                    cursor.execute("INSERT INTO LecturerCourse (lid, cid, assigned_date) VALUES (%s, %s, %s)", 
+                                   (lid, cid, assigned_date))
+                    assigned_pairs.add(pair)
+                    courses_assigned += 1
+                except Exception as e:
+                    print(f"Error assigning lecturer {lid} to course {cid}: {e}")
+            course_index += 1
+
+    remaining_courses = courses[course_index:] if course_index < len(courses) else []
+
+    for i, cid in enumerate(tqdm(remaining_courses, desc = "Assigning remaining courses")):
+        if regular_lecturers:
+            lid = regular_lecturers[i % len(regular_lecturers)]
+        else:
+            lid = lecturers[i % len(lecturers)]
         pair = (lid, cid)
-        if pair not in assigned_pairs:
-            assigned_pairs.add(pair)
-            cursor.execute("INSERT INTO LecturerCourse (lid, cid, assigned_date) VALUES (%s, %s, %s)",
-                           (lid, cid, assigned_date))
 
+        if pair not in assigned_pairs:
+            try:
+                cursor.execute("INSERT INTO LecturerCourse (lid, cid, assigned_date) VALUES (%s, %s, %s)",
+                               (lid, cid, assigned_date))
+                assigned_pairs.add(pair)
+            except Exception as e:
+                print(f"Error assigning lecturer {lid} to course {cid}: {e}")
+    
     conn.commit()
     cursor.close()
     conn.close()
-    print("Lecturers assigned successfully.")
-
+    print("Lecturers assigned to courses successfully.")
+    
 # =========================== Insert Assignment Submissions ===========================
 
 def insert_assignment_submissions():
@@ -384,6 +421,80 @@ def insert_discussion_threads():
     conn.close()
     print("Discussion threads inserted successfully.")
 
+# =========================== Link Assignments to Calendar Events ===========================
+def link_assignments_to_calendar_events():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    print("Linking assignments to calendar events...")
+
+    # Get all assignments
+    cursor.execute("SELECT asid, due_date FROM Assignment")
+    assignments = cursor.fetchall()
+
+    if not assignments:
+        print("No assignments found. Skipping assignment-calendar linking.")
+        return
+
+    for assignment in tqdm(assignments):
+        asid = assignment['asid']
+        due_date = assignment['due_date']
+        
+        # Create a calendar event for each assignment due date
+        cursor.execute("""
+            INSERT INTO CalendarEvent (data, calname, event_date, cid) 
+            SELECT 'Assignment due date', 
+                   CONCAT('Due: ', si.itemname), 
+                   %s, 
+                   s.cid
+            FROM SectionItem si
+            JOIN Section s ON si.secid = s.secid
+            WHERE si.itemid = %s
+        """, (due_date, asid))
+        
+        # Get the calendar event ID
+        evid = cursor.lastrowid
+        
+        # Link assignment to calendar event
+        cursor.execute("INSERT INTO AssignmentCalendarEvent (asid, evid) VALUES (%s, %s)",
+                      (asid, evid))
+    
+    conn.commit()
+    cursor.close()
+    conn.close()
+    print("Assignments linked to calendar events successfully.")
+
+# =========================== Update Student Grades ===========================
+def update_student_grades():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    print("Updating student grades based on assignment submissions...")
+
+    try:
+        # Update student grades based on average of their submissions
+        cursor.execute("""
+            UPDATE Student s
+            SET grade = (
+                SELECT AVG(grade)
+                FROM AssignmentSubmission asm
+                WHERE asm.sid = s.sid AND asm.grade IS NOT NULL
+                GROUP BY asm.sid
+            )
+            WHERE EXISTS (
+                SELECT 1
+                FROM AssignmentSubmission asm
+                WHERE asm.sid = s.sid AND asm.grade IS NOT NULL
+            )
+        """)
+        
+        count = cursor.rowcount
+        conn.commit()
+        print(f"Updated grades for {count} students.")
+    except Exception as e:
+        print(f"Error updating student grades: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+
 # =========================== Insert Calendar Events ===========================
 def insert_calendar_events():
     conn = get_db_connection()
@@ -395,14 +506,37 @@ def insert_calendar_events():
     cursor.execute("SELECT cid FROM Course")
     courses = [row['cid'] for row in cursor.fetchall()]
 
-    for cid in tqdm(courses):
-        # Each course gets 3-5 calendar events
-        for i in range(random.randint(3, 5)):
-            event_name = fake.bs()
-            event_date = fake.date_between(start_date='-30d', end_date='+60d')
-            event_data = fake.paragraph()
+    # Event types with corresponding prefixes/formats
+    event_types = [
+        {"type": "Lecture", "data": "Regularly weekly lecture covering key course topics."},
+        {"type": "Tutorial", "data": "Short assessment to test knowledge of recent material."},
+        {"type": "Midterm Exam", "data": "Major Examincatoin covering all material up to this point."},
+        {"type": "Final Exam", "data": "Final exam covering all material in the course."},
+        {"type": "Project Presentation", "data": "Presentation of group project."},
+        {"type": "Guest Lecture", "data": "Special guest lecture on a relevant topic."},
+        {"type": "Office Hours", "data": "Time for students to meet with the lecturer."},
+        {"type": "Assignment Due Date", "data": "Due date for assignments."}
+    ]
 
-            cursor.execute("INSERT INTO CalendarEvent (data, calname, event_date, cid) VALUES (%s, %s, %s, %s)",
+
+    # Generate dates in the current academic term
+    term_start = datetime(2025,1,20)
+    term_end = datetime(2025,5,15)
+
+    for cid in tqdm(courses):
+        # Each course gets 5-15 calendar events
+        for i in range(random.randint(5, 15)):
+            event = random.choice(event_types)
+
+            event_name = f"{event['type']}: {fake.catch_phrase()}"
+
+            days_range= (term_end - term_start).days
+            random_day =random.randint(0, days_range)
+            event_date = term_start + timedelta(days=random_day)
+
+            event_data = f"{event['data']} Course ID: {cid}."
+
+            cursor.execute("""INSERT INTO CalendarEvent (data, calname, event_date, cid) VALUES (%s, %s, %s, %s)""",
                            (event_data, event_name, event_date, cid))
             
     conn.commit()
@@ -489,7 +623,8 @@ def insert_section_items():
     cursor.close()
     conn.close()
     print("Section items inserted successfully.")
-#
+
+# =========================== Ensure Popular Courses ===========================
 def ensure_popular_courses():
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -534,10 +669,55 @@ def ensure_popular_courses():
 
 
 
+# =========================== Insert Student Replies Function ===========================
+def insert_student_replies():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    print("Inserting student replies...")
 
+    # Get discussion threads
+    cursor.execute("SELECT dtid FROM DiscussionThread LIMIT 5000")
+    threads = [row['dtid'] for row in cursor.fetchall()]
+    
+    # Get student IDs
+    cursor.execute("SELECT sid FROM Student LIMIT 10000")
+    students = [row['sid'] for row in cursor.fetchall()]
+    
+    if not threads:
+        print("No discussion threads found. Skipping student replies.")
+        return
+        
+    # Create a tracking set to avoid duplicates
+    reply_pairs = set()
+    
+    # Insert approximately 20,000 student replies
+    for i in tqdm(range(20000)):
+        dtid = random.choice(threads)
+        sid = random.choice(students)
+        
+        # Check if this pair already exists
+        pair = (sid, dtid)
+        if pair in reply_pairs:
+            continue
+            
+        reply_pairs.add(pair)
+        
+        try:
+            cursor.execute("INSERT INTO StudentReply (sid, dtid) VALUES (%s, %s)", 
+                          (sid, dtid))
+            # Commit every 1000 insertions
+            if i % 1000 == 0:
+                conn.commit()
+        except pymysql.err.IntegrityError as e:
+            # Skip duplicates silently
+            continue
+    
+    conn.commit()
+    print(f"Inserted {len(reply_pairs)} student replies.")
+    cursor.close()
+    conn.close()
 
 if __name__ == '__main__':
-
     # Base data
     insert_students(NUM_STUDENTS)
     insert_lecturers(NUM_LECTURERS)
@@ -552,17 +732,22 @@ if __name__ == '__main__':
     assign_lecturers_to_courses()
     
     # Course content
-    insert_section_items()  # Fixed function
+    insert_section_items()
     insert_assignments(NUM_ASSIGNMENTS)
     
     # Additional features
     insert_discussion_forums()
     insert_discussion_threads()
+    insert_student_replies()  # New function to add
     insert_calendar_events()
     
-    # Finalization
+    # Assignment-related data
     insert_assignment_submissions()
-    ensure_popular_courses()
+    link_assignments_to_calendar_events()  # New function to add
+    update_student_grades()  # New function to add
     
+    # Finalization
+    ensure_popular_courses()
 
+    
     print("Data generation completed!")

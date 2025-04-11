@@ -452,3 +452,39 @@ HAVING COUNT(DISTINCT asm.asid) > 0  -- Only include students who submitted assi
 ORDER BY AVG(asm.grade) DESC
 
 LIMIT 10;
+
+
+
+---
+
+-- Drop existing triggers if they exist
+DROP TRIGGER IF EXISTS after_student_enrollment;
+DROP TRIGGER IF EXISTS after_student_unenrollment;
+
+-- Trigger to update participant count after enrollment
+DELIMITER //
+CREATE TRIGGER after_student_enrollment
+AFTER INSERT ON StudentCourse
+FOR EACH ROW
+BEGIN
+    UPDATE Course 
+    SET participants = (
+        SELECT COUNT(*) FROM StudentCourse WHERE cid = NEW.cid
+    )
+    WHERE cid = NEW.cid;
+END//
+DELIMITER ;
+
+-- Trigger to update participant count after unenrollment
+DELIMITER //
+CREATE TRIGGER after_student_unenrollment
+AFTER DELETE ON StudentCourse
+FOR EACH ROW
+BEGIN
+    UPDATE Course 
+    SET participants = (
+        SELECT COUNT(*) FROM StudentCourse WHERE cid = OLD.cid
+    )
+    WHERE cid = OLD.cid;
+END//
+DELIMITER ;
