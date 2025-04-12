@@ -259,9 +259,11 @@ def get_course_members(course_id):
 # =================================== Retrieve Calendar Events ===================================
 @app.route('/api/calendar_events', methods=['GET'])
 def get_calendar_events():
-    course_id = request.args.get("course_id")
-    date = request.args.get("date")
-    student_id = request.args.get("student_id")
+    data = request.json if request.is_json else {}
+    
+    course_id = data.get("course_id") or request.args.get("course_id")
+    date = data.get("date") or request.args.get("date")
+    student_id = data.get("student_id") or request.args.get("student_id")
 
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -274,22 +276,33 @@ def get_calendar_events():
                 SELECT ce.* FROM CalendarEvent ce
                 JOIN StudentCourse sc ON ce.cid = sc.cid
                 WHERE sc.sid = %s AND ce.event_date = %s
-            """, (student_id,date))
+            """, (student_id, date))
         else:
             return jsonify({"error": "Invalid query parameters"}), 400
 
         events = cursor.fetchall()
-        return jsonify(events), 200
+        
+        # Format the dates for JSON serialization
+        formatted_events = []
+        for event in events:
+            event_dict = dict(event)
+            if 'event_date' in event_dict and event_dict['event_date']:
+                event_dict['event_date'] = event_dict['event_date'].strftime('%Y-%m-%d')
+            if 'created_at' in event_dict and event_dict['created_at']:
+                event_dict['created_at'] = event_dict['created_at'].strftime('%Y-%m-%d %H:%M:%S')
+            formatted_events.append(event_dict)
+            
+        return jsonify(formatted_events), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
         cursor.close()
         conn.close()
-
 # =================================== Create Calendar Events ===================================
 @app.route('/api/calendar_events', methods=['POST'])
 def create_calendar_event():
     data = request.json
+    description = data.get("data")  # Added this line to match table
     calname = data.get("calname")
     event_date = data.get("event_date")
     cid = data.get("cid")
@@ -301,17 +314,16 @@ def create_calendar_event():
     cursor = conn.cursor()
 
     try:
-        cursor.execute("INSERT INTO CalendarEvent (calname, event_date, cid) VALUES (%s, %s, %s)",
-                       (calname, event_date, cid))
+        # Updated to include the 'data' column
+        cursor.execute("INSERT INTO CalendarEvent (data, calname, event_date, cid) VALUES (%s, %s, %s, %s)",
+                      (description, calname, event_date, cid))
         conn.commit()
-        return jsonify({"message": "Calendate event created successfully"}), 201
+        return jsonify({"message": "Calendar event created successfully"}), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
         cursor.close()
         conn.close()
-
-
 
 # =================================== Retrieve Forums ===================================
 
@@ -324,7 +336,7 @@ def get_forums():
 
     try:
         if course_id:
-            cursor.execute("SELECT dfid, dfname FROM DiscussionForum WHERE cid = %s", (course_id))
+            cursor.execute("SELECT dfid, dfname FROM DiscussionForum WHERE cid = %s", (course_id,))
         else:
             cursor.execute("SELECT dfid, dfname, cid FROM DiscussionForum")
 
@@ -365,20 +377,40 @@ def create_forum():
 # =================================== Retrieve Discussion Threads ===================================
 @app.route('/api/threads', methods=['GET'])
 def get_threads():
-    forum_id = request.args.get("forum_id")
+    # Get forum_id from either query parameter name
+    data = request.json if request.is_json else {}
+    forum_id = request.args.get("dfid") or request.args.get("forum_id") or data.get("dfid") or data.get("forum_id")
+    
+    if not forum_id:
+        return jsonify({"error": "Forum ID is required"}), 400
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
     try:
-        cursor.execute("SELECT dtid, dttext, aid, created_at FROM DiscussionThread WHERE dfid = %s", (forum_id,))
+        cursor.execute("""
+            SELECT dtid, dtname, dttext, dfid, aid, parent_dtid, created_at 
+            FROM DiscussionThread 
+            WHERE dfid = %s
+        """, (forum_id,))
+            
         threads = cursor.fetchall()
-        return jsonify(threads), 200
+        
+        # Format the dates for JSON serialization
+        formatted_threads = []
+        for thread in threads:
+            thread_dict = dict(thread)
+            if 'created_at' in thread_dict and thread_dict['created_at']:
+                thread_dict['created_at'] = thread_dict['created_at'].strftime('%Y-%m-%d %H:%M:%S')
+            formatted_threads.append(thread_dict)
+            
+        return jsonify(formatted_threads), 200
     except Exception as e:
-        return jsonify({"error" : str(e)}), 500
+        return jsonify({"error": str(e)}), 500
     finally:
         cursor.close()
         conn.close()
+
 
 # =================================== Retrieve Discussion Threads ===================================
 @app.route('/api/threads/reply', methods=['POST'])
@@ -392,7 +424,7 @@ def reply_to_thread():
     cursor = conn.cursor()
 
     try:
-        cursor.execute("INSERT INTO DiscussionThread (dtname, dttext, dfid, aid, parent_dtid) VALUES (%s, %s, NULL, %s, %s",
+        cursor.execute("INSERT INTO DiscussionThread (dtname, dttext, dfid, aid, parent_dtid) VALUES (%s, %s, NULL, %s, %s)",
                        ("RE: " + str(dtid), dttext, aid, dtid))
         conn.commit()
         return jsonify({"message": "Reply added suuccessfully"}), 201
@@ -409,7 +441,8 @@ def add_course_content():
     data = request.json
     itemname = data.get('itemname')
     secid = data.get("secid")
-    content_type = data.get("type")
+    content_type = data.get("type") or data.get("content_type")
+    # Added this line to match table
     file_path = data.get("file_path", None)
     hyplink = data.get("hyplink", None)
 
@@ -472,7 +505,7 @@ def get_course_content():
         conn.close()
 
 
-# =================================== Assignments Submissions ===================================
+# =================================== Assignments Creation ===================================
 
 @app.route('/api/assignments', methods=['POST'])
 def create_assignment():
@@ -489,6 +522,12 @@ def create_assignment():
     cursor = conn.cursor()
 
     try:
+
+        # Check if the itemid exists in SectionItem
+        cursor.execute("SELECT itemid FROM SectionItem WHERE itemid = %s", (itemid,))
+        if not cursor.fetchone():
+            return jsonify({"error": "Item ID does not exist in SectionItem."}), 404
+
         cursor.execute("INSERT INTO Assignment (asid, submitbox, max_score, due_date) VALUES (%s, %s, %s, %s)",
                        (itemid, submitbox, max_score, due_date))
         conn.commit()
@@ -503,7 +542,8 @@ def create_assignment():
 # =================================== Retrieve Assignments ===================================
 @app.route('/api/assignments', methods=['GET'])
 def get_assignments():
-    course_id = request.args.get("course_id")
+    data = request.json if request.is_json else {}
+    course_id = data.get("course_id") or request.args.get("course_id")
 
     if not course_id:
         return jsonify({"error": "CourseID is required."}), 400
@@ -533,16 +573,16 @@ def submit_assignment():
     data = request.json
     asid = data.get("asid")
     sid = data.get("sid")
-    file_path = data.get("file_path")
+    file_path = data.get("file_path", "")
 
-    if not all([asid, sid, file_path]):
+    if not all([asid, sid]):
         return jsonify({"error": "Missing required fields"}), 400
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
     try:
-        cursor.execute("INSERT INTO AssignmentSubmission (asid, sid, file_path) VALUES",
+        cursor.execute("INSERT INTO AssignmentSubmission (asid, sid, file_path) VALUES (%s, %s, %s)",
                        (asid, sid, file_path))
         conn.commit()
         return jsonify({"message": "Assignment submitted successfully."}), 201
@@ -575,7 +615,7 @@ def grade_assignment():
         cursor.close()
         conn.close()
 
-
+# =================================== Utility Functions ===================================
 @app.route('/api/admin/fix_participant_counts', methods=['POST'])
 def fix_participant_counts():
     user_type = request.json.get("user_type")

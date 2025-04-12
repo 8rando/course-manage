@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_USER=courseadmin
+      - DB_PASSWORD=1234
+      - DB_DATABASE=course_management
+      - JWT_SECRET=your_jwt_secret_key_here
+    depends_on:
+      - db
+    restart: always
+
+  db:
+    image: mysql:8.0
+    ports:
+      - "3307:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpassword
+      - MYSQL_DATABASE=course_management
+      - MYSQL_USER=courseadmin
+      - MYSQL_PASSWORD=1234
+    volumes:
+      - ./creation_fileactual.sql:/docker-entrypoint-initdb.d/init.sql
+      - mysql_data:/var/lib/mysql
+    command: --default-authentication-plugin=mysql_native_password
+    restart: always
+
+volumes:
+  mysql_data:
