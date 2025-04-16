@@ -15,6 +15,14 @@ db_config = {
 }
 
 def get_db_connection():
+    return pymysql.connect(
+        host=db_config['host','localhost'],
+        port=db_config['port' ,'3306'],
+        user=db_config['user', 'courseadmin'],
+        password=db_config['password', '1234'],
+        database=db_config['database', 'course_management'],
+        cursorclass=pymysql.cursors.DictCursor
+    )
     connect_args = {
         'host': db_config['host'],
         'port': db_config['port'],
@@ -29,3 +37,4 @@ def get_db_connection():
         connect_args['ssl'] = {'ca': db_config['ssl_ca']}
         
     return pymysql.connect(**connect_args)
+
