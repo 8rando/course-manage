@@ -14,16 +14,13 @@ db_config = {
     'ssl_ca': os.getenv("DB_SSL_CA", None)  # SSL cert for AWS RDS
 }
 
-
-# Problematic code
-
 def get_db_connection():
     return pymysql.connect(
-        host=db_config['host','localhost'],
-        port=db_config['port' ,'3306'],
-        user=db_config['user', 'courseadmin'],
-        password=db_config['password', '1234'],
-        database=db_config['database', 'course_management'],
+        host=db_config.get('host', 'localhost'),
+        port=db_config.get('port', 3306),
+        user=db_config.get('user', 'courseadmin'),
+        password=db_config.get('password', '1234'),
+        database=db_config.get('database', 'course_management'),
         cursorclass=pymysql.cursors.DictCursor
     )
     connect_args = {
