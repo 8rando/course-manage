@@ -2,6 +2,7 @@ import os
 from dotenv import load_dotenv
 import pymysql
 
+# Load environment variables
 load_dotenv()
 
 # Configuration that works locally and in cloud environments
@@ -15,14 +16,13 @@ db_config = {
 }
 
 def get_db_connection():
-    return pymysql.connect(
-        host=db_config.get('host', 'localhost'),
-        port=db_config.get('port', 3306),
-        user=db_config.get('user', 'courseadmin'),
-        password=db_config.get('password', '1234'),
-        database=db_config.get('database', 'course_management'),
-        cursorclass=pymysql.cursors.DictCursor
-    )
+    """
+    Creates and returns a connection to the database using configuration
+    from environment variables with fallback defaults.
+    
+    Returns:
+        pymysql.connections.Connection: A database connection object
+    """
     connect_args = {
         'host': db_config['host'],
         'port': db_config['port'],
@@ -37,4 +37,44 @@ def get_db_connection():
         connect_args['ssl'] = {'ca': db_config['ssl_ca']}
         
     return pymysql.connect(**connect_args)
-
+    
+def close_connection(connection):
+    """
+    Safely closes a database connection
+    
+    Args:
+        connection: The database connection to close
+    """
+    if connection:
+        connection.close()
+        
+def execute_query(query, params=None, commit=False):
+    """
+    Executes a database query and returns the results
+    
+    Args:
+        query (str): SQL query to execute
+        params (tuple, optional): Parameters for the query
+        commit (bool): Whether to commit the transaction
+        
+    Returns:
+        list: Query results as a list of dictionaries
+        
+    Raises:
+        Exception: If there's a database error
+    """
+    connection = None
+    try:
+        connection = get_db_connection()
+        with connection.cursor() as cursor:
+            cursor.execute(query, params)
+            if commit:
+                connection.commit()
+                return cursor.lastrowid
+            return cursor.fetchall()
+    except Exception as e:
+        if connection and commit:
+            connection.rollback()
+        raise e
+    finally:
+        close_connection(connection)

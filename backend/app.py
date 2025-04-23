@@ -1,9 +1,6 @@
-from os import execle
-
-from click import password_option
 from flask import Flask, request, jsonify
 from flask_bcrypt import Bcrypt
-from config import get_db_connection
+from config import execute_query
 from views_routes import views_bp
 
 app = Flask(__name__)
@@ -28,35 +25,30 @@ def register():
     password = data.get('password')
     user_type = data.get('user_type')
 
-    if not all([fname,lname,password,user_type]):
+    if not all([fname, lname, password, user_type]):
         return jsonify({"error": "Missing required fields"}), 400
 
     hashed_password = bcrypt.generate_password_hash(str(password)).decode('utf-8')
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-
+    
     try:
-        cursor.execute("INSERT INTO Account (password, type, fname, lname) VALUES(%s, %s, %s, %s)",
-                       (hashed_password, user_type, fname,lname))
-        conn.commit()
-        user_id = cursor.lastrowid
+        # Insert into Account table
+        query = "INSERT INTO Account (password, type, fname, lname) VALUES(%s, %s, %s, %s)"
+        params = (hashed_password, user_type, fname, lname)
+        user_id = execute_query(query, params, commit=True)
 
+        # Insert into specific role table
         if user_type == "admin":
-            cursor.execute("INSERT INTO Admin (adid) VALUES (%s)", (user_id,))
+            execute_query("INSERT INTO Admin (adid) VALUES (%s)", (user_id,), commit=True)
         elif user_type == "lecturer":
-            cursor.execute("INSERT INTO Lecturer (lid) VALUES (%s)", (user_id,))
+            execute_query("INSERT INTO Lecturer (lid) VALUES (%s)", (user_id,), commit=True)
         elif user_type == "student":
-            cursor.execute("INSERT INTO Student (sid) VALUES (%s)", (user_id,))
+            execute_query("INSERT INTO Student (sid) VALUES (%s)", (user_id,), commit=True)
 
-        conn.commit()
         return jsonify({"message": "User registered successfully", "user_id": user_id}), 201
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
+
 
 # =================================== User Login ===================================
 
@@ -67,50 +59,46 @@ def login():
     lname = data.get("lname")
     password = data.get("password")
 
-    if not all([fname,lname,password]):
+    if not all([fname, lname, password]):
         return jsonify({"error": "Missing credentials"}), 400
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    try:
+        query = "SELECT aid, password, type FROM Account WHERE fname = %s AND lname = %s"
+        user = execute_query(query, (fname, lname))
+        
+        if user and len(user) > 0 and bcrypt.check_password_hash(user[0]["password"], password):
+            return jsonify({
+                "message": "Login successful", 
+                "user_id": user[0]["aid"], 
+                "type": user[0]["type"]
+            }), 200
+        else:
+            return jsonify({"error": "Invalid credentials"}), 401
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-    cursor.execute("SELECT aid, password, type FROM Account WHERE fname = %s AND lname = %s", (fname, lname))
-    user = cursor.fetchone()
-
-    cursor.close()
-    conn.close()
-
-    # Fix: Access dictionary fields by name instead of position
-    if user and bcrypt.check_password_hash(user["password"], password):
-        return jsonify({"message": "Login successful", "user_id": user["aid"], "type": user["type"]}), 200
-    else:
-        return jsonify({"error": "Invalid credentials"}), 401
 
 # =================================== Retrieve User Information ===================================
 
-
 @app.route("/api/user/<int:user_id>", methods=['GET'])
 def get_user(user_id):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT aid, fname, lname, type, created_at FROM Account WHERE aid = %s", (user_id,))
-    user = cursor.fetchone()
-
-    cursor.close()
-    conn.close()
-
-
-    if user:
-        return jsonify({
-            'user_id': user["aid"],
-            'fname': user["fname"],
-            'lname': user["lname"],
-            'type': user["type"],
-            'created_at': user["created_at"].strftime('%Y-%m-%d %H:%M:%S')
-        }), 200
-    else:
-        return jsonify({"error":"User not found"}), 404
-
+    try:
+        query = "SELECT aid, fname, lname, type, created_at FROM Account WHERE aid = %s"
+        users = execute_query(query, (user_id,))
+        
+        if users and len(users) > 0:
+            user = users[0]
+            return jsonify({
+                'user_id': user["aid"],
+                'fname': user["fname"],
+                'lname': user["lname"],
+                'type': user["type"],
+                'created_at': user["created_at"].strftime('%Y-%m-%d %H:%M:%S')
+            }), 200
+        else:
+            return jsonify({"error": "User not found"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 # =================================== Course Creation ===================================
@@ -122,21 +110,14 @@ def create_course():
     user_type = data.get("user_type")
 
     if not cname or user_type != "admin":
-        return jsonify({"error":"Invalid request. Only admins can create courses."})
-
-    conn = get_db_connection()
-    cursor = conn.cursor()
+        return jsonify({"error": "Invalid request. Only admins can create courses."}), 400
 
     try:
-        cursor.execute("INSERT INTO Course (cname) VALUES (%s)", (cname,))
-        conn.commit()
-        return jsonify({"message": "Course created successfully"})
-
+        execute_query("INSERT INTO Course (cname) VALUES (%s)", (cname,), commit=True)
+        return jsonify({"message": "Course created successfully"}), 201
     except Exception as e:
-        return jsonify({"error":str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
+        return jsonify({"error": str(e)}), 500
+
 
 # =================================== Retrieve Courses ===================================
 
@@ -145,32 +126,28 @@ def get_courses():
     user_type = request.args.get("user_type")
     user_id = request.args.get("user_id")
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
     try:
         if user_type == "student":
-            cursor.execute("""
+            query = """
             SELECT c.cid, c.cname FROM Course c
             JOIN StudentCourse sc ON c.cid = sc.cid
             WHERE sc.sid = %s
-            """, (user_id,))
+            """
+            courses = execute_query(query, (user_id,))
         elif user_type == "lecturer":
-            cursor.execute("""
+            query = """
             SELECT c.cid, c.cname FROM Course c
             JOIN LecturerCourse lc ON c.cid = lc.cid
             WHERE lc.lid = %s
-            """, (user_id,))
+            """
+            courses = execute_query(query, (user_id,))
         else:
-            cursor.execute("SELECT c.cid, c.cname FROM Course c")
-
-        courses = cursor.fetchall()
+            courses = execute_query("SELECT c.cid, c.cname FROM Course c")
+            
         return jsonify(courses), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
+
 
 # =================================== Student Enrollment ===================================
 
@@ -183,24 +160,23 @@ def enroll_student():
     if not sid or not cid:
         return jsonify({"error": "Student ID and Course ID are required"}), 400
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
     try:
-        cursor.execute("SELECT * FROM StudentCourse WHERE sid = %s AND cid = %s", (sid, cid))
-        if cursor.fetchone():
+        # Check if already enrolled
+        query = "SELECT * FROM StudentCourse WHERE sid = %s AND cid = %s"
+        existing = execute_query(query, (sid, cid))
+        
+        if existing and len(existing) > 0:
             return jsonify({"error": "Student is already in this course"}), 409
         
-        cursor.execute("INSERT INTO StudentCourse (sid, cid) VALUES (%s, %s)", (sid, cid))
-        conn.commit()
+        # Enroll student
+        execute_query("INSERT INTO StudentCourse (sid, cid) VALUES (%s, %s)", 
+                     (sid, cid), commit=True)
         
         # Note: The trigger will automatically update the participants count
         return jsonify({"message": "Student enrolled successfully"}), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
+
 
 # =================================== Assign Lecturer to Course ===================================
 
@@ -214,28 +190,20 @@ def assign_lecturer():
     if user_type != 'admin':
         return jsonify({"error": "Only admins can assign lecturers"}), 403
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
     try:
-        cursor.execute("INSERT INTO LecturerCourse (lid, cid) VALUES (%s,%s)", (lid, cid))
-        conn.commit()
+        execute_query("INSERT INTO LecturerCourse (lid, cid) VALUES (%s,%s)", 
+                     (lid, cid), commit=True)
         return jsonify({"message": "Lecturer assigned successfully"}), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
+
 
 # =================================== Retrieve Members ===================================
 
 @app.route('/api/course/<int:course_id>/members', methods=['GET'])
 def get_course_members(course_id):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
     try:
-        cursor.execute("""
+        query = """
         SELECT a.aid, a.fname, a.lname, 'student' AS role
         FROM Account a
         JOIN StudentCourse sc on a.aid = sc.sid
@@ -245,15 +213,11 @@ def get_course_members(course_id):
         FROM Account a
         JOIN LecturerCourse lc ON a.aid = lc.lid
         WHERE lc.cid = %s
-        """, (course_id, course_id))
-
-        members = cursor.fetchall()
+        """
+        members = execute_query(query, (course_id, course_id))
         return jsonify(members), 200
     except Exception as e:
-        return jsonify ({"error": str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
+        return jsonify({"error": str(e)}), 500
 
 
 # =================================== Retrieve Calendar Events ===================================
@@ -265,22 +229,19 @@ def get_calendar_events():
     date = data.get("date") or request.args.get("date")
     student_id = data.get("student_id") or request.args.get("student_id")
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
     try:
         if course_id:
-            cursor.execute("SELECT * FROM CalendarEvent WHERE cid = %s", (course_id,))
+            query = "SELECT * FROM CalendarEvent WHERE cid = %s"
+            events = execute_query(query, (course_id,))
         elif date and student_id:
-            cursor.execute("""
+            query = """
                 SELECT ce.* FROM CalendarEvent ce
                 JOIN StudentCourse sc ON ce.cid = sc.cid
                 WHERE sc.sid = %s AND ce.event_date = %s
-            """, (student_id, date))
+            """
+            events = execute_query(query, (student_id, date))
         else:
             return jsonify({"error": "Invalid query parameters"}), 400
-
-        events = cursor.fetchall()
         
         # Format the dates for JSON serialization
         formatted_events = []
@@ -295,9 +256,8 @@ def get_calendar_events():
         return jsonify(formatted_events), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
+
+
 # =================================== Create Calendar Events ===================================
 @app.route('/api/calendar_events', methods=['POST'])
 def create_calendar_event():
@@ -310,20 +270,13 @@ def create_calendar_event():
     if not all([calname, event_date, cid]):
         return jsonify({"error": "Missing required fields"}), 400
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
     try:
-        # Updated to include the 'data' column
-        cursor.execute("INSERT INTO CalendarEvent (data, calname, event_date, cid) VALUES (%s, %s, %s, %s)",
-                      (description, calname, event_date, cid))
-        conn.commit()
+        query = "INSERT INTO CalendarEvent (data, calname, event_date, cid) VALUES (%s, %s, %s, %s)"
+        execute_query(query, (description, calname, event_date, cid), commit=True)
         return jsonify({"message": "Calendar event created successfully"}), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
+
 
 # =================================== Retrieve Forums ===================================
 
@@ -331,22 +284,17 @@ def create_calendar_event():
 def get_forums():
     course_id = request.args.get("course_id")
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
     try:
         if course_id:
-            cursor.execute("SELECT dfid, dfname FROM DiscussionForum WHERE cid = %s", (course_id,))
+            query = "SELECT dfid, dfname FROM DiscussionForum WHERE cid = %s"
+            forums = execute_query(query, (course_id,))
         else:
-            cursor.execute("SELECT dfid, dfname, cid FROM DiscussionForum")
+            forums = execute_query("SELECT dfid, dfname, cid FROM DiscussionForum")
 
-        forums = cursor.fetchall()
         return jsonify(forums), 200
     except Exception as e:
-        return jsonify({"error": str(e)}),500
-    finally:
-        cursor.close()
-        conn.close()
+        return jsonify({"error": str(e)}), 500
+
 
 # =================================== Create Forums ===================================
 
@@ -360,18 +308,12 @@ def create_forum():
     if user_type not in ['admin', 'lecturer']:
         return jsonify({"error": "Only admins and lecturers can create forums."}), 403
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
     try:
-        cursor.execute("INSERT INTO DiscussionForum (dfname, cid) VALUES (%s, %s)", (dfname, cid))
-        conn.commit()
+        execute_query("INSERT INTO DiscussionForum (dfname, cid) VALUES (%s, %s)", 
+                     (dfname, cid), commit=True)
         return jsonify({"message": "Forum created successfully"}), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
 
 
 # =================================== Retrieve Discussion Threads ===================================
@@ -384,17 +326,13 @@ def get_threads():
     if not forum_id:
         return jsonify({"error": "Forum ID is required"}), 400
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
     try:
-        cursor.execute("""
+        query = """
             SELECT dtid, dtname, dttext, dfid, aid, parent_dtid, created_at 
             FROM DiscussionThread 
             WHERE dfid = %s
-        """, (forum_id,))
-            
-        threads = cursor.fetchall()
+        """
+        threads = execute_query(query, (forum_id,))
         
         # Format the dates for JSON serialization
         formatted_threads = []
@@ -407,9 +345,6 @@ def get_threads():
         return jsonify(formatted_threads), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
 
 
 # =================================== Retrieve Discussion Threads ===================================
@@ -420,19 +355,15 @@ def reply_to_thread():
     aid = data.get("aid")
     dttext = data.get("dttext")
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
     try:
-        cursor.execute("INSERT INTO DiscussionThread (dtname, dttext, dfid, aid, parent_dtid) VALUES (%s, %s, NULL, %s, %s)",
-                       ("RE: " + str(dtid), dttext, aid, dtid))
-        conn.commit()
-        return jsonify({"message": "Reply added suuccessfully"}), 201
+        query = """
+            INSERT INTO DiscussionThread (dtname, dttext, dfid, aid, parent_dtid) 
+            VALUES (%s, %s, NULL, %s, %s)
+        """
+        execute_query(query, ("RE: " + str(dtid), dttext, aid, dtid), commit=True)
+        return jsonify({"message": "Reply added successfully"}), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
 
 
 # =================================== Course Content ===================================
@@ -442,37 +373,31 @@ def add_course_content():
     itemname = data.get('itemname')
     secid = data.get("secid")
     content_type = data.get("type") or data.get("content_type")
-    # Added this line to match table
     file_path = data.get("file_path", None)
     hyplink = data.get("hyplink", None)
 
     if not all([itemname, secid, content_type]):
         return jsonify({"error": "Missing required fields"}), 400
-    conn = get_db_connection()
-    cursor = conn.cursor()
 
     try:
-        cursor.execute("INSERT INTO SectionItem (itemname, secid, type) VALUES (%s, %s, %s)",
-                       (itemname, secid, content_type))
-        conn.commit()
-        itemid = cursor.lastrowid
+        # Insert base section item
+        query = "INSERT INTO SectionItem (itemname, secid, type) VALUES (%s, %s, %s)"
+        itemid = execute_query(query, (itemname, secid, content_type), commit=True)
 
+        # Insert specific content type
         if content_type == 'document' and file_path:
-            cursor.execute("INSERT INTO Document (docid, docname, file_path) VALUES (%s, %s, %s)",
-                           (itemid, itemname, file_path))
+            query = "INSERT INTO Document (docid, docname, file_path) VALUES (%s, %s, %s)"
+            execute_query(query, (itemid, itemname, file_path), commit=True)
         elif content_type == 'lecture_slide' and file_path:
-            cursor.execute("INSERT INTO LectureSlide (lsid, lsname, file_path) VALUES (%s, %s, %s)",
-                           (itemid, itemname, file_path))
+            query = "INSERT INTO LectureSlide (lsid, lsname, file_path) VALUES (%s, %s, %s)"
+            execute_query(query, (itemid, itemname, file_path), commit=True)
         elif content_type == 'link' and hyplink:
-            cursor.execute("INSERT INTO Link (linkid, linkname, hyplink) VALUES (%s, %s, %s)",
-                           (itemid, itemname, hyplink))
-        conn.commit()
+            query = "INSERT INTO Link (linkid, linkname, hyplink) VALUES (%s, %s, %s)"
+            execute_query(query, (itemid, itemname, hyplink), commit=True)
+            
         return jsonify({"message": "Course content added successfully"}), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
 
 
 # =================================== Retrieve Course Content ===================================
@@ -483,26 +408,21 @@ def get_course_content():
     if not course_id:
         return jsonify({"error": "Course ID is required"}), 400
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
     try:
-        cursor.execute("""
-            SELECT si.itemid, si.itemname, si.type, d.file_path AS document_path, ls.file_path AS slide_path, l.hyplink AS link
+        query = """
+            SELECT si.itemid, si.itemname, si.type, d.file_path AS document_path, 
+                   ls.file_path AS slide_path, l.hyplink AS link
             FROM SectionItem si
             LEFT JOIN Document d ON si.itemid = d.docid
             LEFT JOIN LectureSlide ls ON si.itemid = ls.lsid
-            LEFT JOIN Link l on si.itemid = l.linkid
+            LEFT JOIN Link l ON si.itemid = l.linkid
             JOIN Section s ON si.secid = s.secid
             WHERE s.cid = %s
-        """, (course_id,))
-        content = cursor.fetchall()
+        """
+        content = execute_query(query, (course_id,))
         return jsonify(content), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
 
 
 # =================================== Assignments Creation ===================================
@@ -518,25 +438,21 @@ def create_assignment():
     if not all([itemid, due_date]):
         return jsonify({"error": "Missing required fields."}), 400
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
     try:
-
         # Check if the itemid exists in SectionItem
-        cursor.execute("SELECT itemid FROM SectionItem WHERE itemid = %s", (itemid,))
-        if not cursor.fetchone():
+        check_query = "SELECT itemid FROM SectionItem WHERE itemid = %s"
+        item = execute_query(check_query, (itemid,))
+        
+        if not item or len(item) == 0:
             return jsonify({"error": "Item ID does not exist in SectionItem."}), 404
 
-        cursor.execute("INSERT INTO Assignment (asid, submitbox, max_score, due_date) VALUES (%s, %s, %s, %s)",
-                       (itemid, submitbox, max_score, due_date))
-        conn.commit()
-        return jsonify({"message": "Assignment created successfully."})
+        # Create assignment
+        query = "INSERT INTO Assignment (asid, submitbox, max_score, due_date) VALUES (%s, %s, %s, %s)"
+        execute_query(query, (itemid, submitbox, max_score, due_date), commit=True)
+        
+        return jsonify({"message": "Assignment created successfully."}), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
 
 
 # =================================== Retrieve Assignments ===================================
@@ -547,24 +463,28 @@ def get_assignments():
 
     if not course_id:
         return jsonify({"error": "CourseID is required."}), 400
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
+    
     try:
-        cursor.execute("""
+        query = """
         SELECT a.asid, si.itemname, a.max_score, a.due_date
         FROM Assignment a 
         JOIN SectionItem si ON a.asid = si.itemid
         JOIN Section s ON si.secid = s.secid
         WHERE s.cid = %s 
-        """, (course_id,))
-        assignments = cursor.fetchall()
-        return jsonify(assignments), 200
+        """
+        assignments = execute_query(query, (course_id,))
+        
+        # Format dates if needed
+        formatted_assignments = []
+        for assignment in assignments:
+            assignment_dict = dict(assignment)
+            if 'due_date' in assignment_dict and assignment_dict['due_date']:
+                assignment_dict['due_date'] = assignment_dict['due_date'].strftime('%Y-%m-%d %H:%M:%S')
+            formatted_assignments.append(assignment_dict)
+        
+        return jsonify(formatted_assignments), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
 
 
 # =================================== Submit Assignments ===================================
@@ -578,22 +498,16 @@ def submit_assignment():
     if not all([asid, sid]):
         return jsonify({"error": "Missing required fields"}), 400
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
     try:
-        cursor.execute("INSERT INTO AssignmentSubmission (asid, sid, file_path) VALUES (%s, %s, %s)",
-                       (asid, sid, file_path))
-        conn.commit()
+        query = "INSERT INTO AssignmentSubmission (asid, sid, file_path) VALUES (%s, %s, %s)"
+        execute_query(query, (asid, sid, file_path), commit=True)
         return jsonify({"message": "Assignment submitted successfully."}), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
+
 
 # =================================== Grade Assignments ===================================
-@app.route('/api/grade_assignment', methods= ['POST'])
+@app.route('/api/grade_assignment', methods=['POST'])
 def grade_assignment():
     data = request.json
     submission_id = data.get("submission_id")
@@ -601,19 +515,14 @@ def grade_assignment():
 
     if not all([submission_id, grade]):
         return jsonify({"error": "Missing required fields"}), 400
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
+    
     try:
-        cursor.execute("UPDATE AssignmentSubmission SET grade = %s WHERE submission_id= %s",
-                       (grade, submission_id))
-        conn.commit()
+        query = "UPDATE AssignmentSubmission SET grade = %s WHERE submission_id = %s"
+        execute_query(query, (grade, submission_id), commit=True)
         return jsonify({"message": "Assignment graded successfully"}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
+
 
 # =================================== Utility Functions ===================================
 @app.route('/api/admin/fix_participant_counts', methods=['POST'])
@@ -623,25 +532,20 @@ def fix_participant_counts():
     if user_type != "admin":
         return jsonify({"error": "Only admins can run maintenance functions"}), 403
     
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
     try:
-        cursor.execute("""
+        query = """
         UPDATE Course c
         SET c.participants = (
             SELECT COUNT(*) 
             FROM StudentCourse sc 
             WHERE sc.cid = c.cid
         )
-        """)
-        conn.commit()
+        """
+        execute_query(query, commit=True)
         return jsonify({"message": "Participant counts updated successfully"}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
+
 
 if __name__ == "__main__":
-    app.run(port=8080,debug=True)
+    app.run(port=8080, debug=True)

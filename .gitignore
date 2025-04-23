@@ -26,4 +26,8 @@ yarn-error.log*
 # Ignore coverage directory
 coverage/
 
+# venv folder
 venv/
+
+# pycache folder
+__pycache__/
