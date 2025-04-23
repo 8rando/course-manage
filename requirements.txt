@@ -15,3 +15,5 @@ cryptography
 faker
 tqdm
 dotenv
+gunicorn
+

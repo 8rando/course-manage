@@ -7,12 +7,12 @@ load_dotenv()
 
 # Configuration that works locally and in cloud environments
 db_config = {
-    'host': os.getenv("DB_HOST", 'localhost'),
+    'host': '127.0.0.1',  # Use numeric IP instead of 'localhost'
     'port': int(os.getenv("DB_PORT", 3306)),
     'user': os.getenv("DB_USER", 'courseadmin'),
     'password': os.getenv("DB_PASSWORD", '1234'),
     'database': os.getenv("DB_DATABASE", 'course_management'),
-    'ssl_ca': os.getenv("DB_SSL_CA", None)  # SSL cert for AWS RDS
+    'ssl_ca': os.getenv("DB_SSL_CA", None)
 }
 
 def get_db_connection():
