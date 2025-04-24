@@ -5,3 +5,4 @@ __pycache__
 .git
 .env
 .gitignore
+backend/init-data.sql/
