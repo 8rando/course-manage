@@ -1,0 +1,32 @@
+version: '3'
+
+services:
+  api:
+    build: .
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+    environment:
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_USER=courseadmin
+      - DB_PASSWORD=1234
+      - DB_DATABASE=course_management
+    restart: always
+
+  db:
+    image: mariadb:latest
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: course_management
+      MYSQL_USER: courseadmin
+      MYSQL_PASSWORD: 1234
+    volumes:
+      - ./backend/schema.sql:/docker-entrypoint-initdb.d/1-schema.sql
+      - ./backend/init-data.sql:/docker-entrypoint-initdb.d/2-init-data.sql
+      - mariadb_data:/var/lib/mysql
+
+volumes:
+  mariadb_data:
