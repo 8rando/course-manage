@@ -14,9 +14,21 @@ def generate_sql():
         NUM_ADMINS, NUM_MAINTAINERS, prefixes, suffixes
     )
 
+    # Limit the number of records inserted for each table (set to 10)
+#    NUM_STUDENTS = min(10, NUM_STUDENTS)
+#    NUM_LECTURERS = min(10, NUM_LECTURERS)
+#    NUM_ADMINS = min(10, NUM_ADMINS)
+#    NUM_COURSES = min(10, NUM_COURSES)
+
     # Header
     sql_statements.append("-- Generated initialization data")
     sql_statements.append("-- This file was automatically generated from generatedata.py")
+    sql_statements.append("\n")
+
+    # beginning of time stamp
+    sql_statements.append(f"-- create table for amount of time it took to populate db")
+    sql_statements.append(f"CREATE TABLE IF NOT EXISTS log_table (id INT AUTO_INCREMENT PRIMARY KEY, event VARCHAR(100), timestamp DATETIME DEFAULT CURRENT_TIMESTAMP);")
+    sql_statements.append(f"INSERT INTO log_table (event) VALUES ('Start import');")
     sql_statements.append("\n")
 
     # Generate SQL for students - using sequential IDs starting from 1
@@ -83,19 +95,21 @@ def generate_sql():
 
     # Create discussion threads - using an even distribution of authors
     sql_statements.append(f"\n-- Creating discussion threads")
-    sql_statements.append("INSERT INTO DiscussionThread (dtname, dttext, dfid, aid, parent_dtid) " +
-                         "SELECT CONCAT('Thread: ', df.dfname), 'Initial post content', df.dfid, " +
-                         "(SELECT aid FROM Account WHERE type = 'student' ORDER BY aid LIMIT 1 OFFSET MOD(df.dfid, (SELECT COUNT(*) FROM Account WHERE type = 'student'))), " +
-                         "NULL FROM DiscussionForum df;")
+#    sql_statements.append("INSERT INTO DiscussionThread (dtname, dttext, dfid, aid, parent_dtid) SELECT CONCAT('Thread: ', df.dfname), 'Initial post content', df.dfid, (SELECT aid FROM Account WHERE type = 'student' ORDER BY aid LIMIT 1 OFFSET MOD(df.dfid, (SELECT COUNT(*) FROM Account WHERE type = 'student'))), NULL FROM DiscussionForum df;")
 
     # Create calendar events
     sql_statements.append(f"\n-- Creating calendar events")
-    sql_statements.append("INSERT INTO CalendarEvent (data, calname, event_date, cid) SELECT 'Event data', CONCAT('Lecture: ', c.cname), DATE_ADD(NOW(), INTERVAL RAND()*60 DAY), c.cid FROM Course c;")
+#    sql_statements.append("INSERT INTO DiscussionThread (dtname, dttext, dfid, aid, parent_dtid) SELECT CONCAT('Thread: ', df.dfname), 'Initial post content', df.dfid, (SELECT aid FROM Account WHERE type = 'student' ORDER BY aid LIMIT 1 OFFSET MOD(df.dfid, GREATEST(1, (SELECT COUNT(*) FROM Account WHERE type = 'student')))), NULL FROM DiscussionForum df;")
+
+
+    # end of time stamp
+    sql_statements.append("\n-- end query for final time stamp for length of time calculation")
+    sql_statements.append(f"INSERT INTO log_table (event) VALUES ('End import');")
 
     return "\n".join(sql_statements)
 
 if __name__ == "__main__":
-    output_file = sys.argv[1] if len(sys.argv) > 1 else "init-data.sql"
+    output_file = "init-data.sql"
 
     # Generate SQL and write to file
     sql_content = generate_sql()

@@ -12,7 +12,7 @@ app.register_blueprint(views_bp)
 
 @app.route("/")
 def home():
-    return jsonify({"message": "Course Management API is running!"})
+    return jsonify({"message": "Course Management API is running! From docker container on a server!"})
 
 
 # =================================== Registers User ===================================
@@ -29,7 +29,7 @@ def register():
         return jsonify({"error": "Missing required fields"}), 400
 
     hashed_password = bcrypt.generate_password_hash(str(password)).decode('utf-8')
-    
+
     try:
         # Insert into Account table
         query = "INSERT INTO Account (password, type, fname, lname) VALUES(%s, %s, %s, %s)"
@@ -65,7 +65,7 @@ def login():
     try:
         query = "SELECT aid, password, type FROM Account WHERE fname = %s AND lname = %s"
         user = execute_query(query, (fname, lname))
-        
+
         if user and len(user) > 0 and bcrypt.check_password_hash(user[0]["password"], password):
             return jsonify({
                 "message": "Login successful", 
@@ -85,7 +85,7 @@ def get_user(user_id):
     try:
         query = "SELECT aid, fname, lname, type, created_at FROM Account WHERE aid = %s"
         users = execute_query(query, (user_id,))
-        
+
         if users and len(users) > 0:
             user = users[0]
             return jsonify({
@@ -143,7 +143,7 @@ def get_courses():
             courses = execute_query(query, (user_id,))
         else:
             courses = execute_query("SELECT c.cid, c.cname FROM Course c")
-            
+
         return jsonify(courses), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -164,14 +164,14 @@ def enroll_student():
         # Check if already enrolled
         query = "SELECT * FROM StudentCourse WHERE sid = %s AND cid = %s"
         existing = execute_query(query, (sid, cid))
-        
+
         if existing and len(existing) > 0:
             return jsonify({"error": "Student is already in this course"}), 409
-        
+
         # Enroll student
         execute_query("INSERT INTO StudentCourse (sid, cid) VALUES (%s, %s)", 
                      (sid, cid), commit=True)
-        
+
         # Note: The trigger will automatically update the participants count
         return jsonify({"message": "Student enrolled successfully"}), 201
     except Exception as e:
@@ -224,7 +224,7 @@ def get_course_members(course_id):
 @app.route('/api/calendar_events', methods=['GET'])
 def get_calendar_events():
     data = request.json if request.is_json else {}
-    
+
     course_id = data.get("course_id") or request.args.get("course_id")
     date = data.get("date") or request.args.get("date")
     student_id = data.get("student_id") or request.args.get("student_id")
@@ -242,7 +242,7 @@ def get_calendar_events():
             events = execute_query(query, (student_id, date))
         else:
             return jsonify({"error": "Invalid query parameters"}), 400
-        
+
         # Format the dates for JSON serialization
         formatted_events = []
         for event in events:
@@ -252,7 +252,7 @@ def get_calendar_events():
             if 'created_at' in event_dict and event_dict['created_at']:
                 event_dict['created_at'] = event_dict['created_at'].strftime('%Y-%m-%d %H:%M:%S')
             formatted_events.append(event_dict)
-            
+
         return jsonify(formatted_events), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -322,7 +322,7 @@ def get_threads():
     # Get forum_id from either query parameter name
     data = request.json if request.is_json else {}
     forum_id = request.args.get("dfid") or request.args.get("forum_id") or data.get("dfid") or data.get("forum_id")
-    
+
     if not forum_id:
         return jsonify({"error": "Forum ID is required"}), 400
 
@@ -333,7 +333,7 @@ def get_threads():
             WHERE dfid = %s
         """
         threads = execute_query(query, (forum_id,))
-        
+
         # Format the dates for JSON serialization
         formatted_threads = []
         for thread in threads:
@@ -341,7 +341,7 @@ def get_threads():
             if 'created_at' in thread_dict and thread_dict['created_at']:
                 thread_dict['created_at'] = thread_dict['created_at'].strftime('%Y-%m-%d %H:%M:%S')
             formatted_threads.append(thread_dict)
-            
+
         return jsonify(formatted_threads), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -394,7 +394,7 @@ def add_course_content():
         elif content_type == 'link' and hyplink:
             query = "INSERT INTO Link (linkid, linkname, hyplink) VALUES (%s, %s, %s)"
             execute_query(query, (itemid, itemname, hyplink), commit=True)
-            
+
         return jsonify({"message": "Course content added successfully"}), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -442,14 +442,14 @@ def create_assignment():
         # Check if the itemid exists in SectionItem
         check_query = "SELECT itemid FROM SectionItem WHERE itemid = %s"
         item = execute_query(check_query, (itemid,))
-        
+
         if not item or len(item) == 0:
             return jsonify({"error": "Item ID does not exist in SectionItem."}), 404
 
         # Create assignment
         query = "INSERT INTO Assignment (asid, submitbox, max_score, due_date) VALUES (%s, %s, %s, %s)"
         execute_query(query, (itemid, submitbox, max_score, due_date), commit=True)
-        
+
         return jsonify({"message": "Assignment created successfully."}), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -463,7 +463,7 @@ def get_assignments():
 
     if not course_id:
         return jsonify({"error": "CourseID is required."}), 400
-    
+
     try:
         query = """
         SELECT a.asid, si.itemname, a.max_score, a.due_date
@@ -473,7 +473,7 @@ def get_assignments():
         WHERE s.cid = %s 
         """
         assignments = execute_query(query, (course_id,))
-        
+
         # Format dates if needed
         formatted_assignments = []
         for assignment in assignments:
@@ -481,7 +481,7 @@ def get_assignments():
             if 'due_date' in assignment_dict and assignment_dict['due_date']:
                 assignment_dict['due_date'] = assignment_dict['due_date'].strftime('%Y-%m-%d %H:%M:%S')
             formatted_assignments.append(assignment_dict)
-        
+
         return jsonify(formatted_assignments), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -515,7 +515,7 @@ def grade_assignment():
 
     if not all([submission_id, grade]):
         return jsonify({"error": "Missing required fields"}), 400
-    
+
     try:
         query = "UPDATE AssignmentSubmission SET grade = %s WHERE submission_id = %s"
         execute_query(query, (grade, submission_id), commit=True)
@@ -528,10 +528,10 @@ def grade_assignment():
 @app.route('/api/admin/fix_participant_counts', methods=['POST'])
 def fix_participant_counts():
     user_type = request.json.get("user_type")
-    
+
     if user_type != "admin":
         return jsonify({"error": "Only admins can run maintenance functions"}), 403
-    
+
     try:
         query = """
         UPDATE Course c
