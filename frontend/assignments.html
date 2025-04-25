@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assignments | Course Management</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="index.html">Course Management</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="dashboard.html">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="courses.html">Courses</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="forums.html">Forums</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="assignments.html">Assignments</a>
+                    </li>
+                </ul>
+                <div class="navbar-nav user-controls">
+                    <span class="nav-link user-name" id="user-name">Welcome</span>
+                    <a class="nav-link" href="#" id="logout-button">Logout</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4 mb-5">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h2 id="page-title">Assignments</h2>
+                <div id="auth-controls">
+                    <button class="btn btn-outline-primary instructor-only" id="create-assignment-button" data-bs-toggle="modal" data-bs-target="#create-assignment-modal">Create Assignment</button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div id="alert-container"></div>
+                
+                <!-- Course Selection -->
+                <div class="mb-4">
+                    <label for="course-select" class="form-label">Select Course</label>
+                    <select class="form-select" id="course-select">
+                        <option value="">-- Select a course --</option>
+                    </select>
+                </div>
+
+                <!-- Assignments List -->
+                <div id="assignments-section">
+                    <h3 class="mb-3">Available Assignments</h3>
+                    <div id="assignments-loading" class="spinner-border text-primary hidden" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <div id="assignments-container">
+                        <p>Please select a course to view assignments.</p>
+                    </div>
+                </div>
+
+                <!-- Submissions Section (For instructors) -->
+                <div id="submissions-section" class="instructor-only hidden mt-4">
+                    <h3 class="mb-3">Student Submissions</h3>
+                    <div id="submissions-loading" class="spinner-border text-primary hidden" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <div id="submissions-container"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Assignment Modal -->
+    <div class="modal fade" id="create-assignment-modal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Create New Assignment</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="create-assignment-form">
+                        <div class="mb-3">
+                            <label for="sectionSelect" class="form-label">Section</label>
+                            <select class="form-select" id="sectionSelect" name="secid" required>
+                                <option value="">-- Select a section --</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="itemname" class="form-label">Assignment Name</label>
+                            <input type="text" class="form-control" id="itemname" name="itemname" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="max_score" class="form-label">Maximum Score</label>
+                            <input type="number" class="form-control" id="max_score" name="max_score" min="0" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="due_date" class="form-label">Due Date</label>
+                            <input type="datetime-local" class="form-control" id="due_date" name="due_date" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="submitbox" class="form-label">Assignment Instructions</label>
+                            <textarea class="form-control" id="submitbox" name="submitbox" rows="4"></textarea>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-primary">Create Assignment</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Submit Assignment Modal -->
+    <div class="modal fade" id="submit-assignment-modal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Submit Assignment</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="submit-assignment-form">
+                        <input type="hidden" id="asid" name="asid">
+                        <div class="mb-3">
+                            <label for="submission-details" class="form-label">Assignment Details</label>
+                            <div id="submission-details" class="card p-3"></div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="file_path" class="form-label">Submission Location</label>
+                            <input type="text" class="form-control" id="file_path" name="file_path" placeholder="Enter file path or URL">
+                            <small class="text-muted">Please enter the location where your submission can be found</small>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-primary">Submit Assignment</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Grade Assignment Modal -->
+    <div class="modal fade" id="grade-assignment-modal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Grade Submission</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="grade-assignment-form">
+                        <input type="hidden" id="submission_id" name="submission_id">
+                        <div class="mb-3">
+                            <label for="submission-info" class="form-label">Submission Information</label>
+                            <div id="submission-info" class="card p-3"></div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="grade" class="form-label">Grade</label>
+                            <input type="number" class="form-control" id="grade" name="grade" min="0" required>
+                            <small class="text-muted">Enter grade out of the maximum score</small>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-primary">Submit Grade</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="js/assignments.js"></script>
+</body>
+</html>

@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Courses - Course Management System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container">
+            <a class="navbar-brand" href="#">Course Management</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="dashboard.html">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="courses.html">My Courses</a>
+                    </li>
+                    <li class="nav-item admin-only lecturer-only">
+                        <a class="nav-link" href="courses.html?manage=true">Manage Courses</a>
+                    </li>
+                </ul>
+                <div class="d-flex">
+                    <span class="navbar-text me-3" id="user-info">Welcome, </span>
+                    <button class="btn btn-outline-danger" id="logout-btn">Logout</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container dashboard-container">
+        <div class="row mb-4">
+            <div class="col-md-8">
+                <h1 id="page-title">My Courses</h1>
+                <p class="text-muted" id="courses-subtitle">View and access your enrolled courses</p>
+            </div>
+            <div class="col-md-4 text-end student-only">
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#enrollModal">
+                    <i class="bi bi-plus-circle"></i> Enroll in Course
+                </button>
+            </div>
+        </div>
+
+        <!-- Courses List -->
+        <div class="card">
+            <div class="card-header">Available Courses</div>
+            <div class="card-body">
+                <div class="loading" id="courses-loading">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+                <div class="row" id="courses-container">
+                    <!-- Courses will be loaded here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Course Details Section (hidden by default) -->
+        <div class="course-details hidden" id="course-details">
+            <div class="card mt-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span id="course-detail-name">Course Name</span>
+                    <button class="btn btn-sm btn-outline-secondary" id="back-to-courses">
+                        <i class="bi bi-arrow-left"></i> Back to Courses
+                    </button>
+                </div>
+                <div class="card-body">
+                    <ul class="nav nav-tabs" id="course-tabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="content-tab" data-bs-toggle="tab" data-bs-target="#content" type="button" role="tab">Course Content</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="assignments-tab" data-bs-toggle="tab" data-bs-target="#assignments" type="button" role="tab">Assignments</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="forums-tab" data-bs-toggle="tab" data-bs-target="#forums" type="button" role="tab">Forums</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="members-tab" data-bs-toggle="tab" data-bs-target="#members" type="button" role="tab">Members</button>
+                        </li>
+                        <li class="nav-item lecturer-only admin-only" role="presentation">
+                            <button class="nav-link" id="manage-tab" data-bs-toggle="tab" data-bs-target="#manage" type="button" role="tab">Manage</button>
+                        </li>
+                    </ul>
+                    <div class="tab-content p-3" id="course-tab-content">
+                        <!-- Course Content Tab -->
+                        <div class="tab-pane fade show active" id="content" role="tabpanel">
+                            <div class="loading" id="content-loading">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                            </div>
+                            <div id="content-container">
+                                <!-- Course content will be loaded here -->
+                            </div>
+                        </div>
+                        
+                        <!-- Assignments Tab -->
+                        <div class="tab-pane fade" id="assignments" role="tabpanel">
+                            <div class="loading" id="assignments-loading">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                            </div>
+                            <div id="assignments-container">
+                                <!-- Assignments will be loaded here -->
+                            </div>
+                            <div class="lecturer-only admin-only mt-4">
+                                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createAssignmentModal">
+                                    <i class="bi bi-plus-circle"></i> Create Assignment
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Forums Tab -->
+                        <div class="tab-pane fade" id="forums" role="tabpanel">
+                            <div class="loading" id="forums-loading">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                            </div>
+                            <div id="forums-container">
+                                <!-- Forums will be loaded here -->
+                            </div>
+                            <div class="lecturer-only admin-only mt-4">
+                                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createForumModal">
+                                    <i class="bi bi-plus-circle"></i> Create Forum
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Members Tab -->
+                        <div class="tab-pane fade" id="members" role="tabpanel">
+                            <div class="loading" id="members-loading">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                            </div>
+                            <div id="members-container">
+                                <!-- Members will be loaded here -->
+                            </div>
+                        </div>
+                        
+                        <!-- Manage Tab (Admin/Lecturer Only) -->
+                        <div class="tab-pane fade" id="manage" role="tabpanel">
+                            <div class="card mb-4">
+                                <div class="card-header">Add Course Content</div>
+                                <div class="card-body">
+                                    <form id="add-content-form">
+                                        <div class="mb-3">
+                                            <label for="content-name" class="form-label">Content Name</label>
+                                            <input type="text" class="form-control" id="content-name" required>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="content-type" class="form-label">Content Type</label>
+                                            <select class="form-select" id="content-type" required>
+                                                <option value="document">Document</option>
+                                                <option value="lecture_slide">Lecture Slide</option>
+                                                <option value="link">Link</option>
+                                            </select>
+                                        </div>
+                                        <div class="mb-3 content-file-path">
+                                            <label for="file-path" class="form-label">File Path</label>
+                                            <input type="text" class="form-control" id="file-path">
+                                        </div>
+                                        <div class="mb-3 content-link hidden">
+                                            <label for="hyplink" class="form-label">URL</label>
+                                            <input type="url" class="form-control" id="hyplink">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="section-id" class="form-label">Section ID</label>
+                                            <input type="number" class="form-control" id="section-id" required>
+                                        </div>
+                                        <button type="submit" class="btn btn-primary">Add Content</button>
+                                    </form>
+                                </div>
+                            </div>
+                            
+                            <div class="card">
+                                <div class="card-header">Add Calendar Event</div>
+                                <div class="card-body">
+                                    <form id="add-event-form">
+                                        <div class="mb-3">
+                                            <label for="event-name" class="form-label">Event Name</label>
+                                            <input type="text" class="form-control" id="event-name" required>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="event-description" class="form-label">Description</label>
+                                            <textarea class="form-control" id="event-description" rows="3"></textarea>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="event-date" class="form-label">Date</label>
+                                            <input type="date" class="form-control" id="event-date" required>
+                                        </div>
+                                        <button type="submit" class="btn btn-primary">Add Event</button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Enroll in Course Modal -->
+    <div class="modal fade" id="enrollModal" tabindex="-1" aria-labelledby="enrollModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="enrollModalLabel">Enroll in Course</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="enroll-form">
+                        <div class="mb-3">
+                            <label for="enroll-course-id" class="form-label">Course ID</label>
+                            <input type="number" class="form-control" id="enroll-course-id" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Enroll</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Assignment Modal -->
+    <div class="modal fade" id="createAssignmentModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Create Assignment</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="create-assignment-form">
+                        <div class="mb-3">
+                            <label for="assignment-name" class="form-label">Assignment Name</label>
+                            <input type="text" class="form-control" id="assignment-name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="assignment-section" class="form-label">Section ID</label>
+                            <input type="number" class="form-control" id="assignment-section" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="max-score" class="form-label">Maximum Score</label>
+                            <input type="number" class="form-control" id="max-score" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="due-date" class="form-label">Due Date</label>
+                            <input type="datetime-local" class="form-control" id="due-date" required>
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="submit-box" checked>
+                                <label class="form-check-label" for="submit-box">
+                                    Enable Submission Box
+                                </label>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Create Assignment</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Forum Modal -->
+    <div class="modal fade" id="createForumModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Create Forum</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="create-forum-form">
+                        <div class="mb-3">
+                            <label for="forum-name" class="form-label">Forum Name</label>
+                            <input type="text" class="form-control" id="forum-name" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Create Forum</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- View Forum Threads Modal -->
+    <div class="modal fade" id="viewThreadsModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="forum-title">Forum Threads</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="loading" id="threads-loading">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                    <div id="threads-container">
+                        <!-- Threads will be loaded here -->
+                    </div>
+                    <hr>
+                    <h5>Create New Thread</h5>
+                    <form id="create-thread-form">
+                        <input type="hidden" id="forum-id">
+                        <div class="mb-3">
+                            <label for="thread-title" class="form-label">Title</label>
+                            <input type="text" class="form-control" id="thread-title" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="thread-content" class="form-label">Content</label>
+                            <textarea class="form-control" id="thread-content" rows="3" required></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Post Thread</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reply to Thread Modal -->
+    <div class="modal fade" id="replyThreadModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Reply to Thread</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="reply-thread-form">
+                        <input type="hidden" id="thread-id">
+                        <div class="mb-3">
+                            <label for="reply-content" class="form-label">Your Reply</label>
+                            <textarea class="form-control" id="reply-content" rows="3" required></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Post Reply</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Submit Assignment Modal -->
+    <div class="modal fade" id="submitAssignmentModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Submit Assignment</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="submit-assignment-form">
+                        <input type="hidden" id="assignment-id">
+                        <div class="mb-3">
+                            <label for="submission-path" class="form-label">File Path</label>
+                            <input type="text" class="form-control" id="submission-path" required>
+                            <small class="text-muted">Please enter the path to your assignment file</small>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Submit Assignment</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alert container for notifications -->
+    <div class="alert-container" id="alert-container"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/courses.js"></script>
+</body>
+</html>

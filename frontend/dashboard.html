@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Course Management System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container">
+            <a class="navbar-brand" href="#">Course Management</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="dashboard.html">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="courses.html">My Courses</a>
+                    </li>
+                    <li class="nav-item admin-only lecturer-only">
+                        <a class="nav-link" href="courses.html?manage=true">Manage Courses</a>
+                    </li>
+                </ul>
+                <div class="d-flex">
+                    <span class="navbar-text me-3" id="user-info">Welcome, </span>
+                    <button class="btn btn-outline-danger" id="logout-btn">Logout</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container dashboard-container">
+        <div class="row mb-4">
+            <div class="col-12">
+                <h1>Dashboard</h1>
+                <p class="text-muted" id="user-role-display">Loading user information...</p>
+            </div>
+        </div>
+
+        <!-- Admin Panel (visible only to admins) -->
+        <div class="admin-panel admin-only">
+            <div class="card mb-4">
+                <div class="card-header">Admin Controls</div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h5>Create New Course</h5>
+                            <form id="create-course-form">
+                                <div class="mb-3">
+                                    <label for="course-name" class="form-label">Course Name</label>
+                                    <input type="text" class="form-control" id="course-name" required>
+                                </div>
+                                <button type="submit" class="btn btn-primary">Create Course</button>
+                            </form>
+                        </div>
+                        <div class="col-md-6">
+                            <h5>Assign Lecturer to Course</h5>
+                            <form id="assign-lecturer-form">
+                                <div class="mb-3">
+                                    <label for="lecturer-id" class="form-label">Lecturer ID</label>
+                                    <input type="number" class="form-control" id="lecturer-id" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="course-id" class="form-label">Course ID</label>
+                                    <input type="number" class="form-control" id="course-id" required>
+                                </div>
+                                <button type="submit" class="btn btn-primary">Assign Lecturer</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Course Overview -->
+        <div class="card">
+            <div class="card-header">My Courses</div>
+            <div class="card-body">
+                <div class="loading" id="courses-loading">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+                <div class="row" id="courses-container">
+                    <!-- Courses will be loaded here -->
+                </div>
+                <div class="text-center mt-3">
+                    <a href="courses.html" class="btn btn-outline-primary">View All Courses</a>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Today's Events (Student View) -->
+        <div class="card mt-4 student-only">
+            <div class="card-header">Today's Events</div>
+            <div class="card-body">
+                <div class="loading" id="events-loading">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+                <div id="events-container">
+                    <!-- Events will be loaded here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Upcoming Assignments (Student View) -->
+        <div class="card mt-4 student-only">
+            <div class="card-header">Upcoming Assignments</div>
+            <div class="card-body">
+                <div class="loading" id="assignments-loading">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+                <div id="assignments-container">
+                    <!-- Assignments will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alert container for notifications -->
+    <div class="alert-container" id="alert-container"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/dashboard.js"></script>
+</body>
+</html>
