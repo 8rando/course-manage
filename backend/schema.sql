@@ -1,4 +1,5 @@
--- This SQL script creates the database schema for a course management system.
+-- Drop tables if they exist (in reverse order of dependencies)
+
 DROP DATABASE IF EXISTS course_management;
 
 CREATE DATABASE course_management;
@@ -248,7 +249,7 @@ BEGIN
     )
     WHERE cid = NEW.cid;
 
-END;
+
 -- Trigger to update participant count after unenrollment
 CREATE TRIGGER after_student_unenrollment
 AFTER DELETE ON StudentCourse
@@ -260,9 +261,8 @@ BEGIN
     )
     WHERE cid = OLD.cid;
 
-END;
 
-
+-- Add these to your creation_fileactual.sql file
 CREATE INDEX idx_account_fname_lname ON Account(fname, lname);
 CREATE INDEX idx_studentcourse_cid ON StudentCourse(cid);
 CREATE INDEX idx_lecturercourse_cid ON LecturerCourse(cid);

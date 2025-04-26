@@ -717,6 +717,35 @@ def insert_student_replies():
     cursor.close()
     conn.close()
 
+
+
+def update_course_participants():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    print("Updating course participant counts...")
+    
+    try:
+        # Update participants field based on actual enrollments
+        cursor.execute("""
+            UPDATE Course c
+            SET participants = (
+                SELECT COUNT(sc.sid)
+                FROM StudentCourse sc
+                WHERE sc.cid = c.cid
+            )
+        """)
+        
+        rows_updated = cursor.rowcount
+        conn.commit()
+        print(f"Updated participant counts for {rows_updated} courses.")
+    except Exception as e:
+        print(f"Error updating course participants: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+
+
 if __name__ == '__main__':
     # Base data
     insert_students(NUM_STUDENTS)
@@ -748,6 +777,6 @@ if __name__ == '__main__':
     
     # Finalization
     ensure_popular_courses()
+    update_course_participants()
 
-    
     print("Data generation completed!")
