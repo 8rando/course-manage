@@ -595,7 +595,7 @@ def submit_assignment():
     data = request.json
     asid = data.get("asid")
     sid = data.get("sid")
-    file_name = data.get("file_name", "assignment")
+    file_path = data.get("file_name", "assignment")
 
     if not all([asid, sid]):
         return jsonify({"error": "Missing required fields"}), 400
@@ -667,4 +667,4 @@ def fix_participant_counts():
         conn.close()
 
 if __name__ == "__main__":
-    app.run(port=8080,debug=True)
+    app.run(port=5000,debug=True)

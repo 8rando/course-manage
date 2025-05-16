@@ -1,17 +1,19 @@
 import random
 import pymysql
+from hashlib import blake2b
 from faker import Faker
 from tqdm import  tqdm
 from config import get_db_connection
 from datetime import  datetime, timedelta
+
 fake = Faker()
 
 NUM_STUDENTS = 200000  #200000
-NUM_LECTURERS = 2000 #2000
-NUM_COURSES = 400
+NUM_LECTURERS = 15000 #2000
+NUM_COURSES = 600
 NUM_ASSIGNMENTS = 500
-NUM_ADMINS = 10
-NUM_MAINTAINERS = 10
+NUM_ADMINS = 50
+ 
 
 
 prefixes = ['Intro to', 'Advanced', 'Fundamentals of', 'Principles of', 'Basics of', 'Applied', 'Studies in',
@@ -33,8 +35,10 @@ def insert_students(NUM_STUDENTS):
     for i in tqdm(range(NUM_STUDENTS)):
         fname = fake.first_name()
         lname = fake.last_name()
-        password = "password123"
+        password = fake.password(length=12, special_chars=True, digits=True, upper_case=True, lower_case=True)
 
+        # Hash the password using Blake2b
+        password= blake2b(password.encode(), digest_size=32).hexdigest()
         # Insert into Account
         cursor.execute("INSERT INTO Account (password, type, fname, lname) values (%s, 'student', %s, %s)",
                        (password, fname, lname))
@@ -60,7 +64,10 @@ def insert_lecturers(NUM_LECTURERS):
     for _ in tqdm(range(NUM_LECTURERS)):
         fname = fake.first_name()
         lname = fake.last_name()
-        password = "password123"
+        password = fake.password(length=12, special_chars=True, digits=True, upper_case=True, lower_case=True)
+
+        # Hash the password using Blake2b
+        password= blake2b(password.encode(), digest_size=32).hexdigest()
 
         cursor.execute("INSERT INTO Account (password, type, fname, lname) VALUES (%s, 'lecturer', %s, %s)",
                        (password,fname,lname))
@@ -84,7 +91,10 @@ def insert_admins(NUM_ADMINS):
     for _ in tqdm(range(NUM_ADMINS)):
         fname = fake.first_name()
         lname = fake.last_name()
-        password = "password123"
+        password = fake.password(length=12, special_chars=True, digits=True, upper_case=True, lower_case=True)
+
+        # Hash the password using Blake2b
+        password= blake2b(password.encode(), digest_size=32).hexdigest()
 
         cursor.execute("INSERT INTO Account (password, type, fname, lname) VALUES (%s, 'admin', %s, %s)",
                        (password, fname, lname))
@@ -143,13 +153,6 @@ def insert_courses(NUM_COURSES):
 
     print(f"Inserting {NUM_COURSES} courses...")
 
-    # Define prefixes and suffixes for course names
-
-    prefixes = ['Intro to', 'Advanced', 'Fundamentals of', 'Principles of', 'Basics of', 'Applied', 'Studies in',
-                 'Research Methods in', 'Applied', 'Theories of', 'Concepts in', 'Introduction to']
-    suffixes =['Science', 'Mathematics', 'Engineering', 'Computing', 'Biology', 'Physics', 'Chemistry', 'Economics', 'Psychology', 'Distributed Systems', 'Database Management Systems',
-                'Machine Learning', 'Artificial Intelligence', 'Software Engineering', 'Web Development', 'Data Science', 'Cybersecurity', 'Networking', 'Human-Computer Interaction', 
-                'Cloud Computing', 'Information Systems']
     
     # Generate course names
     course_names = []
@@ -222,36 +225,190 @@ def enroll_students():
 
     # Track already assigned enrollments
     enrolled_pairs = set()
-
+    
+    # First, ensure each course has at least 10 students
+    print("Ensuring each course has at least 10 students...")
+    for cid in tqdm(courses):
+        enrolled_count = 0
+        
+        # Enroll at least 10 students in each course
+        for _ in range(10):
+            # Find a student with fewer than 6 courses
+            eligible_students = []
+            for sid in students:
+                student_courses = sum(1 for pair in enrolled_pairs if pair[0] == sid)
+                if student_courses < 6:
+                    eligible_students.append(sid)
+            
+            if not eligible_students:
+                print(f"Warning: Not enough eligible students for course {cid}. Try increasing NUM_STUDENTS.")
+                break
+                
+            sid = random.choice(eligible_students)
+            pair = (sid, cid)
+            
+            if pair not in enrolled_pairs:
+                try:
+                    cursor.execute("INSERT INTO StudentCourse (sid, cid) VALUES (%s, %s)", (sid, cid))
+                    enrolled_pairs.add(pair)
+                    enrolled_count += 1
+                except pymysql.err.IntegrityError as e:
+                    print(f"Warning: Could not enroll student {sid} in course {cid}: {e}")
+    
+    # Now, ensure each student has at least 3 courses (but no more than 6)
+    print("Ensuring each student has at least 3 courses...")
     for sid in tqdm(students):
-        num_courses = random.randint(3, 6)  # Each student takes 3-6 courses
-
-        # Create a pool of available courses for this student
-        available_courses = [(sid, cid) for cid in courses if (sid, cid) not in enrolled_pairs]
-
-        # If we have enough available courses, sample from them
-        if len(available_courses) >= num_courses:
-            selected_courses = random.sample(available_courses, num_courses)
-
-            for sid, cid in selected_courses:
-                try:
-                    cursor.execute("INSERT INTO StudentCourse (sid, cid) VALUES (%s, %s)", (sid, cid))
-                    enrolled_pairs.add((sid, cid))
-                except pymysql.err.IntegrityError as e:
-                    print(f"Warning: Could not enroll student {sid} in course {cid}: {e}")
-        else:
-            # If not enough courses available, add as many as we can
-            for sid, cid in available_courses:
-                try:
-                    cursor.execute("INSERT INTO StudentCourse (sid, cid) VALUES (%s, %s)", (sid, cid))
-                    enrolled_pairs.add((sid, cid))
-                except pymysql.err.IntegrityError as e:
-                    print(f"Warning: Could not enroll student {sid} in course {cid}: {e}")
+        # Count current enrollment for this student
+        student_courses = sum(1 for pair in enrolled_pairs if pair[0] == sid)
+        
+        # If student has fewer than 3 courses, enroll them in more
+        if student_courses < 3:
+            # Calculate how many more courses this student needs
+            needed_courses = 3 - student_courses
+            
+            # Find courses this student is not yet enrolled in
+            available_courses = [cid for cid in courses if (sid, cid) not in enrolled_pairs]
+            
+            # Randomly select courses to enroll this student in
+            if available_courses:
+                to_enroll = min(needed_courses, len(available_courses), 6 - student_courses)
+                for cid in random.sample(available_courses, to_enroll):
+                    try:
+                        cursor.execute("INSERT INTO StudentCourse (sid, cid) VALUES (%s, %s)", (sid, cid))
+                        enrolled_pairs.add((sid, cid))
+                    except pymysql.err.IntegrityError as e:
+                        print(f"Warning: Could not enroll student {sid} in course {cid}: {e}")
 
     conn.commit()
     cursor.close()
     conn.close()
     print("Students enrolled successfully.")
+
+# Add this new function to verify and fix any remaining issues
+def verify_enrollment_constraints():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    print("Verifying enrollment constraints...")
+    
+    # Check for students with more than 6 courses
+    cursor.execute("""
+        SELECT sc.sid, COUNT(sc.cid) AS course_count
+        FROM StudentCourse sc
+        GROUP BY sc.sid
+        HAVING COUNT(sc.cid) > 6
+    """)
+    
+    violations = cursor.fetchall()
+    if violations:
+        print(f"Found {len(violations)} students enrolled in more than 6 courses. Fixing...")
+        
+        for row in violations:
+            sid = row['sid']
+            course_count = row['course_count']
+            to_remove = course_count - 6
+            
+            # Find courses for this student that have more than 10 students
+            cursor.execute("""
+                SELECT sc.cid 
+                FROM StudentCourse sc
+                JOIN (
+                    SELECT cid, COUNT(sid) as student_count
+                    FROM StudentCourse
+                    GROUP BY cid
+                    HAVING COUNT(sid) > 10
+                ) c ON sc.cid = c.cid
+                WHERE sc.sid = %s
+            """, (sid,))
+            
+            safe_to_remove = [row['cid'] for row in cursor.fetchall()]
+            
+            if len(safe_to_remove) >= to_remove:
+                # Remove excess enrollments only from courses that have more than 10 students
+                for cid in random.sample(safe_to_remove, to_remove):
+                    cursor.execute("DELETE FROM StudentCourse WHERE sid = %s AND cid = %s", (sid, cid))
+            else:
+                # Not enough safe courses, remove from any course
+                cursor.execute("SELECT cid FROM StudentCourse WHERE sid = %s", (sid,))
+                all_courses = [row['cid'] for row in cursor.fetchall()]
+                for cid in random.sample(all_courses, to_remove):
+                    cursor.execute("DELETE FROM StudentCourse WHERE sid = %s AND cid = %s", (sid, cid))
+    
+    # Check for courses with fewer than 10 students
+    cursor.execute("""
+        SELECT c.cid, c.cname, COUNT(sc.sid) AS student_count
+        FROM Course c
+        LEFT JOIN StudentCourse sc ON c.cid = sc.cid
+        GROUP BY c.cid, c.cname
+        HAVING COUNT(sc.sid) < 10
+    """)
+    
+    under_enrolled = cursor.fetchall()
+    if under_enrolled:
+        print(f"Found {len(under_enrolled)} courses with fewer than 10 students. Fixing...")
+        
+        # Get students with fewer than 6 courses
+        cursor.execute("""
+            SELECT s.sid, COUNT(sc.cid) AS course_count
+            FROM Student s
+            LEFT JOIN StudentCourse sc ON s.sid = sc.sid
+            GROUP BY s.sid
+            HAVING COUNT(sc.cid) < 6
+            ORDER BY course_count ASC
+        """)
+        
+        eligible_students = cursor.fetchall()
+        if not eligible_students:
+            print("No eligible students found with fewer than 6 courses. Cannot fix under-enrolled courses.")
+            conn.close()
+            return
+        
+        student_pool = [row['sid'] for row in eligible_students]
+        student_index = 0
+        
+        for row in under_enrolled:
+            cid = row['cid']
+            current_count = row['student_count'] if row['student_count'] is not None else 0
+            needed = 10 - current_count
+            
+            print(f"Course {cid} ({row['cname']}) has {current_count} students, needs {needed} more.")
+            
+            for _ in range(needed):
+                if student_index >= len(student_pool):
+                    # Reset to beginning if we've gone through all eligible students
+                    student_index = 0
+                    # Shuffle to avoid always picking the same students
+                    random.shuffle(student_pool)
+                
+                sid = student_pool[student_index]
+                student_index += 1
+                
+                # Check if this student is already in this course
+                cursor.execute("SELECT 1 FROM StudentCourse WHERE sid = %s AND cid = %s", (sid, cid))
+                if cursor.fetchone():
+                    # Skip this student-course pair as it already exists
+                    continue
+                
+                # Enroll the student
+                cursor.execute("INSERT INTO StudentCourse (sid, cid) VALUES (%s, %s)", (sid, cid))
+                
+                # Update this student's course count
+                cursor.execute("SELECT COUNT(cid) AS count FROM StudentCourse WHERE sid = %s", (sid,))
+                count = cursor.fetchone()['count']
+                
+                # If student now has 6 courses, remove them from the pool
+                if count >= 6:
+                    if sid in student_pool:
+                        student_pool.remove(sid)
+            
+            # Verify this course now has at least 10 students
+            cursor.execute("SELECT COUNT(sid) AS count FROM StudentCourse WHERE cid = %s", (cid,))
+            new_count = cursor.fetchone()['count']
+            print(f"Course {cid} now has {new_count} students.")
+    
+    conn.commit()
+    cursor.close()
+    conn.close()
+    print("Enrollment constraints verified and fixed.")
 
 
 # =========================== Assign Lecturers to Courses ===========================
@@ -291,14 +448,13 @@ def assign_lecturers_to_courses():
     special_lecturers = lecturers[:100] if len(lecturers) >= 100 else lecturers
     regular_lecturers = lecturers[100:] if len(lecturers) >= 100 else []
 
-
     assigned_pairs = set()
     assigned_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     course_index = 0
     for lid in tqdm(special_lecturers, desc = "Assigning special lecturers"):
         courses_assigned = 0
-        while courses_assigned < 3 and course_index  < len(courses):
+        while courses_assigned < 3 and course_index < len(courses):
             cid = courses[course_index]
             pair = (lid, cid)
 
@@ -312,15 +468,72 @@ def assign_lecturers_to_courses():
                     print(f"Error assigning lecturer {lid} to course {cid}: {e}")
             course_index += 1
 
+    # Create a set to track lecturers who have been assigned at least one course
+    lecturers_with_courses = {lid for lid, _ in assigned_pairs}
+    
+    # First, ensure every lecturer has at least one course
     remaining_courses = courses[course_index:] if course_index < len(courses) else []
-
-    for i, cid in enumerate(tqdm(remaining_courses, desc = "Assigning remaining courses")):
-        if regular_lecturers:
-            lid = regular_lecturers[i % len(regular_lecturers)]
+    
+    # Assign one course to each remaining lecturer who doesn't have any
+    unassigned_lecturers = [lid for lid in regular_lecturers if lid not in lecturers_with_courses]
+    
+    print(f"Ensuring {len(unassigned_lecturers)} lecturers have at least one course...")
+    
+    # Handle case where we might not have enough courses
+    if len(unassigned_lecturers) > len(remaining_courses):
+        print(f"Warning: Not enough courses ({len(remaining_courses)}) for all unassigned lecturers ({len(unassigned_lecturers)})")
+        print("Creating additional courses...")
+        
+        needed_courses = len(unassigned_lecturers) - len(remaining_courses)
+        
+        # Create additional courses if needed
+        for i in range(needed_courses):
+            prefix = random.choice(prefixes)
+            suffix = random.choice(suffixes)
+            course_name = f"{prefix} {suffix} (Additional {i+1})"
+            
+            cursor.execute("INSERT INTO Course (cname) VALUES (%s)", (course_name,))
+            new_cid = cursor.lastrowid
+            remaining_courses.append(new_cid)
+    
+    # Now assign one course to each unassigned lecturer
+    for i, lid in enumerate(tqdm(unassigned_lecturers, desc="Assigning courses to unassigned lecturers")):
+        if i < len(remaining_courses):
+            cid = remaining_courses[i]
+            pair = (lid, cid)
+            
+            if pair not in assigned_pairs:
+                try:
+                    cursor.execute("INSERT INTO LecturerCourse (lid, cid, assigned_date) VALUES (%s, %s, %s)",
+                                   (lid, cid, assigned_date))
+                    assigned_pairs.add(pair)
+                    lecturers_with_courses.add(lid)
+                except Exception as e:
+                    print(f"Error assigning lecturer {lid} to course {cid}: {e}")
+    
+    # Distribute any remaining courses
+    still_remaining_courses = remaining_courses[len(unassigned_lecturers):]
+    
+    for i, cid in enumerate(tqdm(still_remaining_courses, desc="Assigning remaining courses")):
+        # Distribute remaining courses among all lecturers, prioritizing those with fewer courses
+        cursor.execute("""
+            SELECT l.lid, COUNT(lc.cid) AS course_count
+            FROM Lecturer l
+            LEFT JOIN LecturerCourse lc ON l.lid = lc.lid
+            GROUP BY l.lid
+            ORDER BY course_count ASC
+            LIMIT 1
+        """)
+        
+        result = cursor.fetchone()
+        if result:
+            lid = result['lid']
         else:
+            # Fallback if the query doesn't work as expected
             lid = lecturers[i % len(lecturers)]
+        
         pair = (lid, cid)
-
+        
         if pair not in assigned_pairs:
             try:
                 cursor.execute("INSERT INTO LecturerCourse (lid, cid, assigned_date) VALUES (%s, %s, %s)",
@@ -329,11 +542,34 @@ def assign_lecturers_to_courses():
             except Exception as e:
                 print(f"Error assigning lecturer {lid} to course {cid}: {e}")
     
+    # Final verification - check if any lecturers still don't have courses
+    cursor.execute("""
+        SELECT l.lid
+        FROM Lecturer l
+        LEFT JOIN LecturerCourse lc ON l.lid = lc.lid
+        WHERE lc.lid IS NULL
+    """)
+    
+    unassigned = cursor.fetchall()
+    if unassigned:
+        print(f"Warning: There are still {len(unassigned)} lecturers without courses. Creating emergency courses...")
+        
+        for row in unassigned:
+            lid = row['lid']
+            emergency_course_name = f"Emergency Course for Lecturer {lid}"
+            
+            # Create an emergency course
+            cursor.execute("INSERT INTO Course (cname) VALUES (%s)", (emergency_course_name,))
+            new_cid = cursor.lastrowid
+            
+            # Assign the lecturer to this course
+            cursor.execute("INSERT INTO LecturerCourse (lid, cid, assigned_date) VALUES (%s, %s, %s)",
+                           (lid, new_cid, assigned_date))
+    
     conn.commit()
     cursor.close()
     conn.close()
     print("Lecturers assigned to courses successfully.")
-    
 # =========================== Insert Assignment Submissions ===========================
 
 def insert_assignment_submissions():
@@ -510,7 +746,7 @@ def insert_calendar_events():
     event_types = [
         {"type": "Lecture", "data": "Regularly weekly lecture covering key course topics."},
         {"type": "Tutorial", "data": "Short assessment to test knowledge of recent material."},
-        {"type": "Midterm Exam", "data": "Major Examincatoin covering all material up to this point."},
+        {"type": "Midterm Exam", "data": "Major Examination covering all material up to this point."},
         {"type": "Final Exam", "data": "Final exam covering all material in the course."},
         {"type": "Project Presentation", "data": "Presentation of group project."},
         {"type": "Guest Lecture", "data": "Special guest lecture on a relevant topic."},
@@ -767,15 +1003,16 @@ if __name__ == '__main__':
     # Additional features
     insert_discussion_forums()
     insert_discussion_threads()
-    insert_student_replies()  # New function to add
+    insert_student_replies()
     insert_calendar_events()
     
     # Assignment-related data
     insert_assignment_submissions()
-    link_assignments_to_calendar_events()  # New function to add
-    update_student_grades()  # New function to add
+    link_assignments_to_calendar_events()
+    update_student_grades()
     
-    # Finalization
+    # Finalization and constraint verification
+    verify_enrollment_constraints()  # Add this new function call
     ensure_popular_courses()
     update_course_participants()
 
