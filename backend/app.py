@@ -191,9 +191,13 @@ def enroll_student():
         if cursor.fetchone():
             return jsonify({"error": "Student is already in this course"}), 409
         
+        # Insert student into the course
         cursor.execute("INSERT INTO StudentCourse (sid, cid) VALUES (%s, %s)", (sid, cid))
         conn.commit()
         
+        cursor.execute("UPDATE Course SET participants = participants + 1 WHERE cid = %s", (cid,))
+
+        conn.commit()
         # Note: The trigger will automatically update the participants count
         return jsonify({"message": "Student enrolled successfully"}), 201
     except Exception as e:
@@ -306,6 +310,7 @@ def create_calendar_event():
     calname = data.get("calname")
     event_date = data.get("event_date")
     cid = data.get("cid")
+    event_data = data.get("data", "")
 
     if not all([calname, event_date, cid]):
         return jsonify({"error": "Missing required fields"}), 400
@@ -420,14 +425,31 @@ def reply_to_thread():
     aid = data.get("aid")
     dttext = data.get("dttext")
 
+    if not all([dtid, aid, dttext]):
+        return jsonify({"error": "Missing required fields"}), 400
+    
+
     conn = get_db_connection()
     cursor = conn.cursor()
 
     try:
-        cursor.execute("INSERT INTO DiscussionThread (dtname, dttext, dfid, aid, parent_dtid) VALUES (%s, %s, NULL, %s, %s)",
-                       ("RE: " + str(dtid), dttext, aid, dtid))
+        # First, get the parent thread's forum ID
+        cursor.execute("SELECT dfid FROM DiscussionThread WHERE dtid = %s", (dtid,))
+        parent_thread = cursor.fetchone()
+        
+        if not parent_thread:
+            return jsonify({"error": "Parent thread not found"}), 404
+            
+        dfid = parent_thread["dfid"]
+        
+        # Now insert the reply with proper values
+        cursor.execute("""
+            INSERT INTO DiscussionThread (dtname, dttext, dfid, aid, parent_dtid) 
+            VALUES (%s, %s, %s, %s, %s)
+        """, (f"RE: Thread {dtid}", dttext, dfid, aid, dtid))
+        
         conn.commit()
-        return jsonify({"message": "Reply added suuccessfully"}), 201
+        return jsonify({"message": "Reply added successfully"}), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
@@ -573,7 +595,7 @@ def submit_assignment():
     data = request.json
     asid = data.get("asid")
     sid = data.get("sid")
-    file_path = data.get("file_path", "")
+    file_path = data.get("file_name", "assignment")
 
     if not all([asid, sid]):
         return jsonify({"error": "Missing required fields"}), 400
@@ -581,6 +603,7 @@ def submit_assignment():
     conn = get_db_connection()
     cursor = conn.cursor()
 
+    file_path = f"uploads/{asid}/{sid}/{file_path}"
     try:
         cursor.execute("INSERT INTO AssignmentSubmission (asid, sid, file_path) VALUES (%s, %s, %s)",
                        (asid, sid, file_path))
@@ -644,4 +667,4 @@ def fix_participant_counts():
         conn.close()
 
 if __name__ == "__main__":
-    app.run(port=8080,debug=True)
+    app.run(port=5000,debug=True)
