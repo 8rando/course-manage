@@ -14,7 +14,7 @@ NUM_ADMINS      = 10    #10
 NUM_MAINTAINERS = 10    #10
 NUM_POP_COURSES = 200    #200
 MIN_STUDENTS    = 10
-NUM_STUDENTS_WITH_5_PLUS_COURSES = 6000	#6000
+NUM_STUDENTS_WITH_5_PLUS_COURSES = 6000
 
 
 prefixes = ['Intro to', 'Advanced', 'Fundamentals of', 'Principles of', 'Basics of', 'Applied', 'Studies in',
@@ -307,24 +307,10 @@ def assign_lecturers_to_courses():
     # Track number of courses per lecturer
     lecturer_course_count = {lid: 0 for lid in lecturers}
     
-    # First ensure each lecturer has at least 1 course - CRITICAL CONSTRAINT
+    # First ensure each lecturer has at least 1 course
     print("Ensuring each lecturer has at least 1 course...")
-    
-    # Check if we have enough courses for all lecturers
-    if len(courses) < len(lecturers):
-        print(f"Warning: Not enough courses ({len(courses)}) to assign at least one to each lecturer ({len(lecturers)}).")
-        print("Some courses will be assigned to multiple lecturers to meet the minimum requirement.")
-        
-        # Make a copy of courses that we can reuse if needed
-        all_courses = courses.copy()
-        
-        # If we need to reuse courses, we'll cycle through them
-        for lid in tqdm(lecturers):
-            # If we've used all courses once, reload the list
-            if not courses:
-                courses = all_courses.copy()
-                print("Reusing courses to ensure all lecturers have assignments...")
-            
+    for lid in tqdm(lecturers):
+        if lecturer_course_count[lid] == 0 and courses:
             cid = courses.pop(0)
             try:
                 cursor.execute("INSERT INTO LecturerCourse (lid, cid, assigned_date) VALUES (%s, %s, %s)", 
@@ -333,45 +319,32 @@ def assign_lecturers_to_courses():
                 lecturer_course_count[lid] += 1
             except Exception as e:
                 print(f"Error assigning lecturer {lid} to course {cid}: {e}")
-    else:
-        # We have enough courses, so we can assign unique courses to each lecturer
-        for lid in tqdm(lecturers):
-            if lecturer_course_count[lid] == 0 and courses:
-                cid = courses.pop(0)
-                try:
-                    cursor.execute("INSERT INTO LecturerCourse (lid, cid, assigned_date) VALUES (%s, %s, %s)", 
-                                   (lid, cid, assigned_date))
-                    assigned_pairs.add((lid, cid))
-                    lecturer_course_count[lid] += 1
-                except Exception as e:
-                    print(f"Error assigning lecturer {lid} to course {cid}: {e}")
-                    courses.append(cid)  # Put the course back if assignment failed
+                courses.append(cid)  # Put the course back if assignment failed
     
     # Then distribute remaining courses, ensuring no lecturer gets more than 5
     print("Distributing remaining courses...")
-    if courses:  # Only proceed if there are courses left to assign
-        random.shuffle(courses)  # Randomize course order
+    random.shuffle(courses)  # Randomize course order
+    
+    for cid in tqdm(courses):
+        # Find lecturers with fewer than 5 courses
+        eligible_lecturers = [lid for lid, count in lecturer_course_count.items() if count < 5]
         
-        for cid in tqdm(courses):
-            # Find lecturers with fewer than 5 courses
-            eligible_lecturers = [lid for lid, count in lecturer_course_count.items() if count < 5]
+        if not eligible_lecturers:
+            print(f"Warning: No lecturers available to teach course {cid}. All have reached maximum load.")
+            continue
             
-            if not eligible_lecturers:
-                print(f"Warning: No lecturers available to teach course {cid}. All have reached maximum load.")
-                continue
-                
-            # Choose lecturer with fewest courses (to balance load)
-            lid = min(eligible_lecturers, key=lambda l: lecturer_course_count[l])
-            
-            pair = (lid, cid)
-            if pair not in assigned_pairs:
-                try:
-                    cursor.execute("INSERT INTO LecturerCourse (lid, cid, assigned_date) VALUES (%s, %s, %s)",
-                                   (lid, cid, assigned_date))
-                    assigned_pairs.add(pair)
-                    lecturer_course_count[lid] += 1
-                except Exception as e:
-                    print(f"Error assigning lecturer {lid} to course {cid}: {e}")
+        # Choose lecturer with fewest courses (to balance load)
+        lid = min(eligible_lecturers, key=lambda l: lecturer_course_count[l])
+        
+        pair = (lid, cid)
+        if pair not in assigned_pairs:
+            try:
+                cursor.execute("INSERT INTO LecturerCourse (lid, cid, assigned_date) VALUES (%s, %s, %s)",
+                               (lid, cid, assigned_date))
+                assigned_pairs.add(pair)
+                lecturer_course_count[lid] += 1
+            except Exception as e:
+                print(f"Error assigning lecturer {lid} to course {cid}: {e}")
     
     conn.commit()
     

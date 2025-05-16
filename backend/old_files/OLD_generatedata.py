@@ -6,15 +6,12 @@ from config import get_db_connection
 from datetime import  datetime, timedelta
 fake = Faker()
 
-NUM_STUDENTS    = 200000   #200000
-NUM_LECTURERS   = 2000    #2000
-NUM_COURSES     = 400    #400
+NUM_STUDENTS    = 200   #200000
+NUM_LECTURERS   = 20    #2000
+NUM_COURSES     = 40    #400
 NUM_ASSIGNMENTS = 500   #500
 NUM_ADMINS      = 10    #10
 NUM_MAINTAINERS = 10    #10
-NUM_POP_COURSES = 200    #200
-MIN_STUDENTS    = 10
-NUM_STUDENTS_WITH_5_PLUS_COURSES = 6000	#6000
 
 
 prefixes = ['Intro to', 'Advanced', 'Fundamentals of', 'Principles of', 'Basics of', 'Applied', 'Studies in',
@@ -23,13 +20,14 @@ suffixes =['Science', 'Mathematics', 'Engineering', 'Computing', 'Biology', 'Phy
                 'Machine Learning', 'Artificial Intelligence', 'Software Engineering', 'Web Development', 'Data Science', 'Cybersecurity', 'Networking', 'Human-Computer Interaction', 
                 'Cloud Computing', 'Information Systems']
 
+
 # =========================== Create Log Table ==========================
 def create_log_table():
     conn = get_db_connection()
     cursor = conn.cursor()
-    
+
     print("Creating log table...")
-    
+
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS log_table (
         id INT AUTO_INCREMENT PRIMARY KEY, 
@@ -37,9 +35,9 @@ def create_log_table():
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     )
     """)
-    
+
     cursor.execute("INSERT INTO log_table (event) VALUES ('Start import')")
-    
+
     conn.commit()
     cursor.close()
     conn.close()
@@ -168,7 +166,7 @@ def insert_courses(NUM_COURSES):
     suffixes =['Science', 'Mathematics', 'Engineering', 'Computing', 'Biology', 'Physics', 'Chemistry', 'Economics', 'Psychology', 'Distributed Systems', 'Database Management Systems',
                 'Machine Learning', 'Artificial Intelligence', 'Software Engineering', 'Web Development', 'Data Science', 'Cybersecurity', 'Networking', 'Human-Computer Interaction', 
                 'Cloud Computing', 'Information Systems']
-    
+
     # Generate course names
     course_names = []
     used_combinations = set()
@@ -197,6 +195,7 @@ def insert_courses(NUM_COURSES):
         cursor.close()
         conn.close()
     print("Courses inserted successfully.")
+
 
 # =========================== Insert Sections ===========================
 def insert_sections():
@@ -270,127 +269,82 @@ def enroll_students():
     conn.close()
     print("Students enrolled successfully.")
 
+
 # =========================== Assign Lecturers to Courses ===========================
 def assign_lecturers_to_courses():
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    print("Assigning lecturers to courses with constraints (1-5 courses per lecturer)...")
+    print("Assigning lecturers to courses...")
 
     # Retrieve valid lecturer IDs
     cursor.execute("SELECT lid FROM Lecturer")
     lecturers = [row['lid'] for row in cursor.fetchall()]
 
     if not lecturers:
-        print("Error: No lecturers found in the database.")
+        print("Error: No lecturers found in the database. Ensure lecturers are inserted before running this function.")
         conn.close()
         return
-    
+
     # Retrieve valid course IDs
     cursor.execute("SELECT cid FROM Course")
     courses = [row['cid'] for row in cursor.fetchall()]
 
     if not courses:
-        print("Error: No courses found in the database.")
+        print("Error: No courses found in the database. Ensure courses are inserted before running this function.")
         conn.close()
         return
-    
+
     try:
         cursor.execute("DELETE FROM LecturerCourse")
         print("Cleared existing lecturer-course assignments.")
     except Exception as e:
         print(f"Warning: Could not clear existing assignments: {e}")
 
+    # Creating special distribution such that lecturers will have 3+ courses
+    # First 100 lecturers will be assigned to 3 courses each
+    special_lecturers = lecturers[:100] if len(lecturers) >= 100 else lecturers
+    regular_lecturers = lecturers[100:] if len(lecturers) >= 100 else []
+
+
     assigned_pairs = set()
     assigned_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    # Track number of courses per lecturer
-    lecturer_course_count = {lid: 0 for lid in lecturers}
-    
-    # First ensure each lecturer has at least 1 course - CRITICAL CONSTRAINT
-    print("Ensuring each lecturer has at least 1 course...")
-    
-    # Check if we have enough courses for all lecturers
-    if len(courses) < len(lecturers):
-        print(f"Warning: Not enough courses ({len(courses)}) to assign at least one to each lecturer ({len(lecturers)}).")
-        print("Some courses will be assigned to multiple lecturers to meet the minimum requirement.")
-        
-        # Make a copy of courses that we can reuse if needed
-        all_courses = courses.copy()
-        
-        # If we need to reuse courses, we'll cycle through them
-        for lid in tqdm(lecturers):
-            # If we've used all courses once, reload the list
-            if not courses:
-                courses = all_courses.copy()
-                print("Reusing courses to ensure all lecturers have assignments...")
-            
-            cid = courses.pop(0)
-            try:
-                cursor.execute("INSERT INTO LecturerCourse (lid, cid, assigned_date) VALUES (%s, %s, %s)", 
-                               (lid, cid, assigned_date))
-                assigned_pairs.add((lid, cid))
-                lecturer_course_count[lid] += 1
-            except Exception as e:
-                print(f"Error assigning lecturer {lid} to course {cid}: {e}")
-    else:
-        # We have enough courses, so we can assign unique courses to each lecturer
-        for lid in tqdm(lecturers):
-            if lecturer_course_count[lid] == 0 and courses:
-                cid = courses.pop(0)
+
+    course_index = 0
+    for lid in tqdm(special_lecturers, desc = "Assigning special lecturers"):
+        courses_assigned = 0
+        while courses_assigned < 3 and course_index  < len(courses):
+            cid = courses[course_index]
+            pair = (lid, cid)
+
+            if pair not in assigned_pairs:
                 try:
                     cursor.execute("INSERT INTO LecturerCourse (lid, cid, assigned_date) VALUES (%s, %s, %s)", 
                                    (lid, cid, assigned_date))
-                    assigned_pairs.add((lid, cid))
-                    lecturer_course_count[lid] += 1
-                except Exception as e:
-                    print(f"Error assigning lecturer {lid} to course {cid}: {e}")
-                    courses.append(cid)  # Put the course back if assignment failed
-    
-    # Then distribute remaining courses, ensuring no lecturer gets more than 5
-    print("Distributing remaining courses...")
-    if courses:  # Only proceed if there are courses left to assign
-        random.shuffle(courses)  # Randomize course order
-        
-        for cid in tqdm(courses):
-            # Find lecturers with fewer than 5 courses
-            eligible_lecturers = [lid for lid, count in lecturer_course_count.items() if count < 5]
-            
-            if not eligible_lecturers:
-                print(f"Warning: No lecturers available to teach course {cid}. All have reached maximum load.")
-                continue
-                
-            # Choose lecturer with fewest courses (to balance load)
-            lid = min(eligible_lecturers, key=lambda l: lecturer_course_count[l])
-            
-            pair = (lid, cid)
-            if pair not in assigned_pairs:
-                try:
-                    cursor.execute("INSERT INTO LecturerCourse (lid, cid, assigned_date) VALUES (%s, %s, %s)",
-                                   (lid, cid, assigned_date))
                     assigned_pairs.add(pair)
-                    lecturer_course_count[lid] += 1
+                    courses_assigned += 1
                 except Exception as e:
                     print(f"Error assigning lecturer {lid} to course {cid}: {e}")
-    
+            course_index += 1
+
+    remaining_courses = courses[course_index:] if course_index < len(courses) else []
+
+    for i, cid in enumerate(tqdm(remaining_courses, desc = "Assigning remaining courses")):
+        if regular_lecturers:
+            lid = regular_lecturers[i % len(regular_lecturers)]
+        else:
+            lid = lecturers[i % len(lecturers)]
+        pair = (lid, cid)
+
+        if pair not in assigned_pairs:
+            try:
+                cursor.execute("INSERT INTO LecturerCourse (lid, cid, assigned_date) VALUES (%s, %s, %s)",
+                               (lid, cid, assigned_date))
+                assigned_pairs.add(pair)
+            except Exception as e:
+                print(f"Error assigning lecturer {lid} to course {cid}: {e}")
+
     conn.commit()
-    
-    # Verify constraints
-    cursor.execute("""
-        SELECT lid, COUNT(cid) as course_count 
-        FROM LecturerCourse 
-        GROUP BY lid 
-        HAVING COUNT(cid) < 1 OR COUNT(cid) > 5
-    """)
-    
-    violations = cursor.fetchall()
-    if violations:
-        print("Warning: Some lecturers do not meet the 1-5 course constraint:")
-        for v in violations:
-            print(f"  Lecturer ID {v['lid']}: {v['course_count']} courses")
-    else:
-        print("All lecturers have between 1-5 courses as required.")
-    
     cursor.close()
     conn.close()
     print("Lecturers assigned to courses successfully.")
@@ -433,6 +387,8 @@ def insert_assignment_submissions():
         cursor.close()
         conn.close()
 
+
+
 # =========================== Insert Discussion Forums ===========================
 def insert_discussion_forums():
     conn = get_db_connection()
@@ -447,13 +403,12 @@ def insert_discussion_forums():
         for i in range(random.randint(1, 3)):
             forum_name = fake.catch_phrase()
             cursor.execute("INSERT INTO DiscussionForum (dfname, cid) VALUES (%s, %s)", (forum_name, cid))
-        
+
     conn.commit()
     cursor.close()
     conn.close()
     print("Discussion forums inserted successfully.")
 
-# =========================== Insert Discussion Threads ===========================
 def insert_discussion_threads():
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -497,7 +452,7 @@ def link_assignments_to_calendar_events():
     for assignment in tqdm(assignments):
         asid = assignment['asid']
         due_date = assignment['due_date']
-        
+
         # Create a calendar event for each assignment due date
         cursor.execute("""
             INSERT INTO CalendarEvent (data, calname, event_date, cid) 
@@ -509,14 +464,14 @@ def link_assignments_to_calendar_events():
             JOIN Section s ON si.secid = s.secid
             WHERE si.itemid = %s
         """, (due_date, asid))
-        
+
         # Get the calendar event ID
         evid = cursor.lastrowid
-        
+
         # Link assignment to calendar event
         cursor.execute("INSERT INTO AssignmentCalendarEvent (asid, evid) VALUES (%s, %s)",
                       (asid, evid))
-    
+
     conn.commit()
     cursor.close()
     conn.close()
@@ -544,7 +499,7 @@ def update_student_grades():
                 WHERE asm.sid = s.sid AND asm.grade IS NOT NULL
             )
         """)
-        
+
         count = cursor.rowcount
         conn.commit()
         print(f"Updated grades for {count} students.")
@@ -560,7 +515,7 @@ def insert_calendar_events():
     cursor = conn.cursor()
 
     print("Inserting calendar events...")
-    
+
     # Get all course IDs
     cursor.execute("SELECT cid FROM Course")
     courses = [row['cid'] for row in cursor.fetchall()]
@@ -597,7 +552,7 @@ def insert_calendar_events():
 
             cursor.execute("""INSERT INTO CalendarEvent (data, calname, event_date, cid) VALUES (%s, %s, %s, %s)""",
                            (event_data, event_name, event_date, cid))
-            
+
     conn.commit()
     cursor.close()
     conn.close()
@@ -613,67 +568,67 @@ def insert_section_items():
     # Get all section IDs
     cursor.execute("SELECT secid FROM Section")
     sections = [row['secid'] for row in cursor.fetchall()]
-    
+
     # Define prefixes and suffixes for content items
     doc_prefixes = ["Lecture Notes on", "Guide to", "Introduction to", "Summary of", 
                    "Research Paper:", "Workshop on", "Study Materials for", "Handbook of"]
-    
+
     doc_suffixes = ["Core Concepts", "Practical Applications", "Theoretical Foundations", 
                    "Common Problems", "Key Techniques", "Essential Principles", 
                    "Historical Overview", "Modern Approaches", "Best Practices"]
-    
+
     slide_prefixes = ["Week", "Lecture", "Tutorial", "Module", "Session", "Class", "Unit", "Workshop"]
-    
+
     slide_suffixes = ["Overview", "Introduction", "Key Concepts", "Advanced Topics", 
                      "Review", "Case Study", "Practice Problems", "Discussion Points"]
-    
+
     link_prefixes = ["Resource:", "External Link:", "Website:", "Reference:", "Tutorial:", 
                     "Video:", "Tool:", "Article:"]
-    
+
     link_suffixes = ["Additional Reading", "Interactive Demo", "Practice Exercise", 
                     "Visualization", "Reference Implementation", "Documentation", 
                     "Research Paper", "Industry Example"]
-    
+
     item_types = ['document', 'link', 'lecture_slide']
 
     for secid in tqdm(sections):
         for i in range(random.randint(2, 5)):
             item_type = random.choice(item_types)
-            
+
             # Generate a name appropriate for the content type
             if item_type == 'document':
                 prefix = random.choice(doc_prefixes)
                 suffix = random.choice(doc_suffixes)
                 item_name = f"{prefix} {suffix}"
                 file_path = f"/files/documents/{suffix.lower().replace(' ', '_')}_{random.randint(1000, 9999)}.pdf"
-            
+
             elif item_type == 'lecture_slide':
                 prefix = random.choice(slide_prefixes)
                 suffix = random.choice(slide_suffixes)
                 item_name = f"{prefix} {random.randint(1, 12)}: {suffix}"
                 file_path = f"/files/slides/{prefix.lower()}_{suffix.lower().replace(' ', '_')}_{random.randint(1000, 9999)}.pptx"
-            
+
             elif item_type == 'link':
                 prefix = random.choice(link_prefixes)
                 suffix = random.choice(link_suffixes)
                 item_name = f"{prefix} {suffix}"
                 link_url = f"https://{fake.domain_name()}/{suffix.lower().replace(' ', '-')}"
-            
+
             # Insert the section item
             cursor.execute("INSERT INTO SectionItem (itemname, secid, type) VALUES (%s, %s, %s)",
                           (item_name, secid, item_type))
-            
+
             item_id = cursor.lastrowid
 
             # Create appropriate type-specific record
             if item_type == 'document':
                 cursor.execute("INSERT INTO Document (docid, docname, file_path) VALUES (%s, %s, %s)", 
                               (item_id, item_name, file_path))
-            
+
             elif item_type == 'link':
                 cursor.execute("INSERT INTO Link (linkid, linkname, hyplink) VALUES (%s, %s, %s)", 
                               (item_id, item_name, link_url))
-            
+
             elif item_type == 'lecture_slide':
                 cursor.execute("INSERT INTO LectureSlide (lsid, lsname, file_path) VALUES (%s, %s, %s)", 
                               (item_id, item_name, file_path))
@@ -684,193 +639,49 @@ def insert_section_items():
     print("Section items inserted successfully.")
 
 # =========================== Ensure Popular Courses ===========================
-def ensure_popular_courses(NUM_POP_COURSES):
-    """
-    Make a specific number of courses have 50+ students enrolled.
-    
-    Args:
-        num_popular_courses: Number of courses to make popular (default: 10)
-    """
+def ensure_popular_courses():
     conn = get_db_connection()
     cursor = conn.cursor()
-    print(f"Ensuring {NUM_POP_COURSES} courses have 50+ students...")
+    print("Ensuring courses have 50+ students...")
 
-    # Get all courses with their current enrollment counts
-    cursor.execute("""
-        SELECT c.cid, COUNT(sc.sid) as count
-        FROM Course c
-        LEFT JOIN StudentCourse sc ON c.cid = sc.cid
-        GROUP BY c.cid
-        ORDER BY RAND()
-    """)
-    
-    courses = cursor.fetchall()
-    
-    # Get all students
-    cursor.execute("SELECT sid FROM Student")
+    # Get students
+    cursor.execute("SELECT sid FROM Student LIMIT 10000")
     students = [row['sid'] for row in cursor.fetchall()]
-    
-    # Counter for popular courses created
-    popular_courses = 0
-    
-    for course in tqdm(courses):
-        if popular_courses >= NUM_POP_COURSES:
-            break
-            
-        cid = course['cid']
-        current_count = course['count']
-        
-        # If already has 50+ students, count it and continue
-        if current_count >= 50:
-            popular_courses += 1
-            continue
-            
-        # Calculate how many more students needed
-        needed = 50 - current_count
-        
-        # Find students not in this course
-        cursor.execute("SELECT sid FROM Student WHERE sid NOT IN (SELECT sid FROM StudentCourse WHERE cid = %s)", (cid,))
-        available_students = [row['sid'] for row in cursor.fetchall()]
-        
-        if len(available_students) < needed:
-            print(f"Warning: Not enough available students for course {cid}. Skipping.")
-            continue
-            
-        # Enroll additional students to reach 50+
-        to_add = random.sample(available_students, needed)
-        for sid in to_add:
-            cursor.execute("INSERT INTO StudentCourse (sid, cid) VALUES (%s, %s)", (sid, cid))
-            
-        popular_courses += 1
 
-    conn.commit()
-    cursor.close()
-    conn.close()
-    print(f"Successfully created {popular_courses} courses with 50+ students.")
 
-# =========================== Ensure Students with 5+ Courses ===========================
-def ensure_students_with_5_plus_courses(NUM_STUDENTS_WITH_5_PLUS_COURSES):
-    """
-    Ensure a specific number of students are taking 5 or more courses.
-    
-    Args:
-        num_students_with_5_plus: Number of students to have 5+ courses (default: 50)
-    """
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    print(f"Ensuring {NUM_STUDENTS_WITH_5_PLUS_COURSES} students have 5+ courses...")
-
-    # Find current enrollment counts for all students
-    cursor.execute("""
-        SELECT s.sid, COUNT(sc.cid) as course_count
-        FROM Student s
-        LEFT JOIN StudentCourse sc ON s.sid = sc.sid
-        GROUP BY s.sid
-        ORDER BY course_count DESC
-    """)
-    
-    student_counts = cursor.fetchall()
-    
-    # Get all course IDs
-    cursor.execute("SELECT cid FROM Course")
-    all_courses = [row['cid'] for row in cursor.fetchall()]
-    
-    # Counter for students with 5+ courses
-    students_with_five_plus = 0
-    
-    for student in tqdm(student_counts):
-        if students_with_five_plus >= NUM_STUDENTS_WITH_5_PLUS_COURSES:
-            break
-            
-        sid = student['sid']
-        current_count = student['course_count']
-        
-        # If already taking 5+ courses, count and continue
-        if current_count >= 5:
-            students_with_five_plus += 1
-            continue
-            
-        # Calculate how many more courses needed
-        needed = 5 - current_count
-        
-        # Find courses student isn't enrolled in
-        cursor.execute("SELECT cid FROM Course WHERE cid NOT IN (SELECT cid FROM StudentCourse WHERE sid = %s)", (sid,))
-        available_courses = [row['cid'] for row in cursor.fetchall()]
-        
-        if len(available_courses) < needed:
-            print(f"Warning: Not enough available courses for student {sid}. Skipping.")
-            continue
-            
-        # Enroll in additional courses
-        courses_to_add = random.sample(available_courses, needed)
-        for cid in courses_to_add:
-            cursor.execute("INSERT INTO StudentCourse (sid, cid) VALUES (%s, %s)", (sid, cid))
-            
-        students_with_five_plus += 1
-    
-    conn.commit()
-    cursor.close()
-    conn.close()
-    print(f"Successfully created {students_with_five_plus} students with 5+ courses.")
-
-# =========================== Ensure Courses Have Minimum Students ===========================
-def ensure_minimum_course_enrollment(MIN_STUDENTS):
-    """
-    Ensure each course has at least the minimum number of students.
-    """
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    print(f"Ensuring all courses have at least {MIN_STUDENTS} students...")
-
-    # Find courses with fewer than minimum students
+    # Get courses with fewer than 50 students
     cursor.execute("""
         SELECT c.cid, COUNT(sc.sid) as count
         FROM Course c
         LEFT JOIN StudentCourse sc ON c.cid = sc.cid
         GROUP BY c.cid
-        HAVING COUNT(sc.sid) < %s
-    """, (MIN_STUDENTS,))
-    
+        HAVING COUNT(sc.sid) < 50
+        LIMIT 20
+""")
+
     courses = cursor.fetchall()
-    
-    if not courses:
-        print("All courses already meet minimum enrollment requirements.")
-        cursor.close()
-        conn.close()
-        return
-        
-    # Get all students
-    cursor.execute("SELECT sid FROM Student")
-    all_students = [row['sid'] for row in cursor.fetchall()]
-    
+
     for course in tqdm(courses):
         cid = course['cid']
-        current_count = course['count']
-        needed = MIN_STUDENTS - current_count
-        
-        # Get students not enrolled in this course
-        cursor.execute("""
-            SELECT s.sid 
-            FROM Student s
-            WHERE s.sid NOT IN (SELECT sc.sid FROM StudentCourse sc WHERE sc.cid = %s)
-            AND (SELECT COUNT(*) FROM StudentCourse sc2 WHERE sc2.sid = s.sid) < 6
-        """, (cid,))
-        
-        available_students = [row['sid'] for row in cursor.fetchall()]
-        
-        if len(available_students) < needed:
-            print(f"Warning: Not enough available students for course {cid}. Could only add {len(available_students)} of {needed} needed.")
-            needed = len(available_students)
-            
-        if needed > 0:
-            students_to_add = random.sample(available_students, needed)
-            for sid in students_to_add:
-                cursor.execute("INSERT INTO StudentCourse (sid, cid) VALUES (%s, %s)", (sid, cid))
-    
+        needed = 50 - course['count']
+
+        # Find students not in this course
+        cursor.execute("SELECT sid FROM StudentCourse WHERE cid = %s", (cid,))
+        existing = {row['sid'] for row in cursor.fetchall()}
+
+        avaliable = [s for s in students if s not in existing]
+        to_add = min(needed, len(avaliable))
+
+        for sid in random.sample(avaliable, to_add):
+            cursor.execute("INSERT INTO StudentCourse (sid, cid) VALUES (%s, %s)", (sid, cid))
+
     conn.commit()
     cursor.close()
     conn.close()
-    print("Course minimum enrollment requirements ensured.")
+    print("Course enrollment adjusted successfully.")
+
+
+
 
 # =========================== Insert Student Replies Function ===========================
 def insert_student_replies():
@@ -881,30 +692,30 @@ def insert_student_replies():
     # Get discussion threads
     cursor.execute("SELECT dtid FROM DiscussionThread LIMIT 5000")
     threads = [row['dtid'] for row in cursor.fetchall()]
-    
+
     # Get student IDs
     cursor.execute("SELECT sid FROM Student LIMIT 10000")
     students = [row['sid'] for row in cursor.fetchall()]
-    
+
     if not threads:
         print("No discussion threads found. Skipping student replies.")
         return
-        
+
     # Create a tracking set to avoid duplicates
     reply_pairs = set()
-    
+
     # Insert approximately 20,000 student replies
     for i in tqdm(range(20000)):
         dtid = random.choice(threads)
         sid = random.choice(students)
-        
+
         # Check if this pair already exists
         pair = (sid, dtid)
         if pair in reply_pairs:
             continue
-            
+
         reply_pairs.add(pair)
-        
+
         try:
             cursor.execute("INSERT INTO StudentReply (sid, dtid) VALUES (%s, %s)", 
                           (sid, dtid))
@@ -914,7 +725,7 @@ def insert_student_replies():
         except pymysql.err.IntegrityError as e:
             # Skip duplicates silently
             continue
-    
+
     conn.commit()
     print(f"Inserted {len(reply_pairs)} student replies.")
     cursor.close()
@@ -924,11 +735,11 @@ def insert_student_replies():
 def record_completion():
     conn = get_db_connection()
     cursor = conn.cursor()
-    
+
     print("Recording completion timestamp...")
-    
+
     cursor.execute("INSERT INTO log_table (event) VALUES ('End import')")
-    
+
     conn.commit()
     cursor.close()
     conn.close()
@@ -938,41 +749,39 @@ def record_completion():
 if __name__ == '__main__':
     # Start timing
     create_log_table()
-    
+
     # Base data
     insert_students(NUM_STUDENTS)
     insert_lecturers(NUM_LECTURERS)
     insert_admins(NUM_ADMINS)
-    
+
     # Courses and their components
     insert_courses(NUM_COURSES)
     insert_sections()
-    
+
     # Relationships
     enroll_students()
     assign_lecturers_to_courses()
-    
+
     # Course content
     insert_section_items()
     insert_assignments(NUM_ASSIGNMENTS)
-    
+
     # Additional features
     insert_discussion_forums()
     insert_discussion_threads()
     insert_student_replies()  # New function to add
     insert_calendar_events()
-    
+
     # Assignment-related data
     insert_assignment_submissions()
     link_assignments_to_calendar_events()  # New function to add
     update_student_grades()  # New function to add
-    
-    # Ensure specific data distributions for views AND project constraints
-    ensure_popular_courses(NUM_POP_COURSES)
-    ensure_students_with_5_plus_courses(NUM_STUDENTS_WITH_5_PLUS_COURSES)
-    ensure_minimum_course_enrollment(MIN_STUDENTS)
-    
+
+    # Finalization
+    ensure_popular_courses()
+
     # End timing
     record_completion()
-    
+
     print("Data generation completed!")

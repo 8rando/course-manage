@@ -3,6 +3,7 @@ services:
     build: .
     ports:
       - "8000:8080"  # Map container port 8080 to host port 8000
+#      - "9000:80"    # Map container web port 80 to host port 9000 (add this line)
     depends_on:
       - db
     environment:
@@ -11,6 +12,8 @@ services:
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_DATABASE=${DB_DATABASE}
+#    volumes:
+#      - ./frontend:/var/www/html
     restart: always
 
   db:
@@ -24,7 +27,7 @@ services:
     volumes:
       - ./backend/schema.sql:/docker-entrypoint-initdb.d/1-schema.sql
       # Use a bind mount for the generated file
-      - ./backend/init-data.sql:/docker-entrypoint-initdb.d/2-init-data.sql
+#      - ./backend/init-data.sql:/docker-entrypoint-initdb.d/2-init-data.sql
       - mariadb_data:/var/lib/mysql
 
 volumes:

@@ -6,3 +6,6 @@ __pycache__
 .env
 .gitignore
 backend/init-data.sql/
+backend/OLD_generatedata.py
+backend/OLD_init_data_generator.py
+backend/OLD_schema.sql

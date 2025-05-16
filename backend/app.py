@@ -2,9 +2,17 @@ from flask import Flask, request, jsonify
 from flask_bcrypt import Bcrypt
 from config import execute_query
 from views_routes import views_bp
+from flask_cors import CORS
 
 app = Flask(__name__)
 bcrypt = Bcrypt(app)
+
+# set up cors policy
+CORS(app, resources={r"/api/*": {
+    "origins": ["https://coursemanage.duckdns.org"],
+    "methods": ["GET", "POST", "PUT", "DELETE"],
+    "allow_headers": ["Content-Type", "Authorization"]
+}})
 
 # Register the views blueprint
 app.register_blueprint(views_bp)

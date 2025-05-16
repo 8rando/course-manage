@@ -93,13 +93,34 @@ def generate_sql():
     sql_statements.append(f"\n-- Creating discussion forums")
     sql_statements.append("INSERT INTO DiscussionForum (dfname, cid) SELECT CONCAT('Forum for ', c.cname), c.cid FROM Course c;")
 
-    # Create discussion threads - using an even distribution of authors
-    sql_statements.append(f"\n-- Creating discussion threads")
-#    sql_statements.append("INSERT INTO DiscussionThread (dtname, dttext, dfid, aid, parent_dtid) SELECT CONCAT('Thread: ', df.dfname), 'Initial post content', df.dfid, (SELECT aid FROM Account WHERE type = 'student' ORDER BY aid LIMIT 1 OFFSET MOD(df.dfid, (SELECT COUNT(*) FROM Account WHERE type = 'student'))), NULL FROM DiscussionForum df;")
+
+    # Create discussion threads - safe version using window functions
+    sql_statements.append(f"\n-- Creating discussion threads using temporary tables (MariaDB-compatible)")
+    sql_statements.append("DROP TEMPORARY TABLE IF EXISTS student_ranked;")
+    sql_statements.append("DROP TEMPORARY TABLE IF EXISTS forum_ranked;")
+    sql_statements.append("""
+    CREATE TEMPORARY TABLE student_ranked AS
+	SELECT aid, ROW_NUMBER() OVER (ORDER BY aid) AS rnk
+	FROM Account
+	WHERE type = 'student';
+    """)
+    sql_statements.append("""
+    CREATE TEMPORARY TABLE forum_ranked AS
+	SELECT dfid, dfname, ROW_NUMBER() OVER (ORDER BY dfid) AS rnk
+	FROM DiscussionForum;
+    """)
+    sql_statements.append("""
+    INSERT INTO DiscussionThread (dtname, dttext, dfid, aid, parent_dtid)
+    SELECT CONCAT('Thread: ', f.dfname), 'Initial post content', f.dfid, s.aid, NULL
+    FROM forum_ranked f
+    JOIN student_ranked s
+	ON MOD(f.rnk, (SELECT COUNT(*) FROM student_ranked)) = MOD(s.rnk, (SELECT COUNT(*) FROM student_ranked));
+    """)
+
 
     # Create calendar events
     sql_statements.append(f"\n-- Creating calendar events")
-#    sql_statements.append("INSERT INTO DiscussionThread (dtname, dttext, dfid, aid, parent_dtid) SELECT CONCAT('Thread: ', df.dfname), 'Initial post content', df.dfid, (SELECT aid FROM Account WHERE type = 'student' ORDER BY aid LIMIT 1 OFFSET MOD(df.dfid, GREATEST(1, (SELECT COUNT(*) FROM Account WHERE type = 'student')))), NULL FROM DiscussionForum df;")
+    sql_statements.append("INSERT INTO DiscussionThread (dtname, dttext, dfid, aid, parent_dtid) SELECT CONCAT('Thread: ', df.dfname), 'Initial post content', df.dfid, (SELECT aid FROM Account WHERE type = 'student' ORDER BY aid LIMIT 1 OFFSET MOD(df.dfid, GREATEST(1, (SELECT COUNT(*) FROM Account WHERE type = 'student')))), NULL FROM DiscussionForum df;")
 
 
     # end of time stamp

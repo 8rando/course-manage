@@ -1,15 +1,24 @@
 -- This SQL script creates the database schema for a course management system.
 DROP DATABASE IF EXISTS course_management;
-
 CREATE DATABASE course_management;
-
 USE course_management;
 
+-- Drop triggers and views first (to avoid dependency errors)
+DROP TRIGGER IF EXISTS after_student_enrollment;
+DROP TRIGGER IF EXISTS after_student_unenrollment;
+
+DROP VIEW IF EXISTS Top10StudentsWithHighestAverages;
+DROP VIEW IF EXISTS Top10MostEnrolledCourses;
+DROP VIEW IF EXISTS LecturersWith3OrMoreCourses;
+DROP VIEW IF EXISTS StudentsWith5OrMoreCourses;
+DROP VIEW IF EXISTS CoursesWith50OrMoreStudents;
+
+-- Drop tables in correct dependency order
 DROP TABLE IF EXISTS StudentReply;
 DROP TABLE IF EXISTS AssignmentCalendarEvent;
 DROP TABLE IF EXISTS AssignmentSubmission;
-DROP TABLE IF EXISTS Document;
 DROP TABLE IF EXISTS LectureSlide;
+DROP TABLE IF EXISTS Document;
 DROP TABLE IF EXISTS Link;
 DROP TABLE IF EXISTS Assignment;
 DROP TABLE IF EXISTS SectionItem;
@@ -25,7 +34,7 @@ DROP TABLE IF EXISTS Lecturer;
 DROP TABLE IF EXISTS Admin;
 DROP TABLE IF EXISTS Account;
 
--- Create tables based on the provided schema
+-- Begin schema creation
 CREATE TABLE Account (
     aid INT AUTO_INCREMENT PRIMARY KEY,
     password VARCHAR(255) NOT NULL,
@@ -50,7 +59,7 @@ CREATE TABLE Student (
     grade DECIMAL(5,2) DEFAULT 0.0,
     FOREIGN KEY (sid) REFERENCES Account(aid) ON DELETE CASCADE
 );
- 
+
 CREATE TABLE Course (
     cid INT AUTO_INCREMENT PRIMARY KEY,
     cname VARCHAR(255) NOT NULL,
@@ -72,7 +81,7 @@ CREATE TABLE LecturerCourse (
     lid INT,
     cid INT,
     assigned_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (lid,cid),  -- One lecturer per course
+    PRIMARY KEY (lid, cid),
     FOREIGN KEY (lid) REFERENCES Lecturer(lid) ON DELETE CASCADE,
     FOREIGN KEY (cid) REFERENCES Course(cid) ON DELETE CASCADE
 );
@@ -91,8 +100,8 @@ CREATE TABLE DiscussionThread (
     dtname VARCHAR(255) NOT NULL,
     dttext TEXT NOT NULL,
     dfid INT,
-    aid INT,  -- Author of the thread
-    parent_dtid INT NULL,  -- For replies to other threads (NULL if it's a top-level thread)
+    aid INT,
+    parent_dtid INT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (dfid) REFERENCES DiscussionForum(dfid) ON DELETE CASCADE,
     FOREIGN KEY (aid) REFERENCES Account(aid) ON DELETE CASCADE,
@@ -146,9 +155,8 @@ CREATE TABLE Assignment (
 
 -- Relationship between Assignment and CalendarEvent (due date)
 CREATE TABLE AssignmentCalendarEvent (
-    asid INT,
+    asid INT PRIMARY KEY,
     evid INT,
-    PRIMARY KEY (asid),
     FOREIGN KEY (asid) REFERENCES Assignment(asid) ON DELETE CASCADE,
     FOREIGN KEY (evid) REFERENCES CalendarEvent(evid) ON DELETE CASCADE
 );
@@ -219,7 +227,7 @@ SELECT c.cid, c.cname, COUNT(sc.sid) AS enrollment_count
 FROM Course c
 JOIN StudentCourse sc ON c.cid = sc.cid
 GROUP BY c.cid, c.cname
-ORDER BY COUNT(sc.sid) DESC
+ORDER BY enrollment_count DESC
 LIMIT 10;
 
 -- View 5: Top 10 students with highest overall averages
@@ -229,13 +237,12 @@ FROM Student s
 JOIN Account a ON s.sid = a.aid
 JOIN AssignmentSubmission asm ON s.sid = asm.sid
 GROUP BY s.sid, a.fname, a.lname
-HAVING COUNT(DISTINCT asm.asid) > 0  -- Only include students who submitted assignments
-ORDER BY AVG(asm.grade) DESC
+HAVING COUNT(DISTINCT asm.asid) > 0
+ORDER BY average_grade DESC
 LIMIT 10;
 
--- Drop existing triggers if they exist
-DROP TRIGGER IF EXISTS after_student_enrollment;
-DROP TRIGGER IF EXISTS after_student_unenrollment;
+-- Set delimiter for multi-statement trigger creation
+DELIMITER $$
 
 -- Trigger to update participant count after enrollment
 CREATE TRIGGER after_student_enrollment
@@ -247,8 +254,8 @@ BEGIN
         SELECT COUNT(*) FROM StudentCourse WHERE cid = NEW.cid
     )
     WHERE cid = NEW.cid;
+END$$
 
-END;
 -- Trigger to update participant count after unenrollment
 CREATE TRIGGER after_student_unenrollment
 AFTER DELETE ON StudentCourse
@@ -259,10 +266,11 @@ BEGIN
         SELECT COUNT(*) FROM StudentCourse WHERE cid = OLD.cid
     )
     WHERE cid = OLD.cid;
+END$$
 
-END;
+DELIMITER ;
 
-
+-- Indexes
 CREATE INDEX idx_account_fname_lname ON Account(fname, lname);
 CREATE INDEX idx_studentcourse_cid ON StudentCourse(cid);
 CREATE INDEX idx_lecturercourse_cid ON LecturerCourse(cid);
